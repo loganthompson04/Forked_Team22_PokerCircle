@@ -1,0 +1,105 @@
+ERROR:  duplicate key value violates unique constraint "game_sessions_sessioncode_key"
+Key (sessioncode)=(ABC123) already exists. 
+
+SQL state: 23505
+Detail: Key (sessioncode)=(ABC123) already exists.
+
+-- Valid session insert
+INSERT INTO game_sessions (sessionCode) VALUES ('ABC123');
+INSERT 0 1
+
+-- Duplicate sessionCode (should fail)
+ERROR: duplicate key value violates unique constraint "game_sessions_sessioncode_key"
+DETAIL: Key (sessioncode)=(ABC123) already exists.
+
+-- Invalid foreign key (should fail)
+ERROR: insert or update on table "players" violates foreign key constraint "fk_players_session"
+
+-- Null displayName (should fail)
+ERROR: null value in column "displayName" violates not-null constraint
+
+-- Valid player insert
+INSERT 0 1
+
+"session_id"	"sessioncode"	"player_id"	"displayname"
+1	"ABC123"	3	"Ana"
+1	"ABC123"	4	"Bob"
+
+ERROR:  insert or update on table "players" violates foreign key constraint "fk_players_session"
+Key (sessionid)=(999999) is not present in table "game_sessions". 
+
+SQL state: 23503
+Detail: Key (sessionid)=(999999) is not present in table "game_sessions".
+
+
+PS C:\Users\gianm\Team22_PokerCircle> $session = Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/sessions"
+>>
+PS C:\Users\gianm\Team22_PokerCircle> $session | ConvertTo-Json -Depth 5
+{
+    "sessionId":  6,
+    "sessionCode":  "BZ6KWN",
+    "createdAt":  "2026-03-03T07:36:41.870Z",
+    "players":  [
+
+                ]                     Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/sessions/$($session.sessionCode)/join" -Body '{"displayName":"Ana"}' -ContentType "application/json" | ConvertTo-Json -Depth 5
+{
+    "sessionId":  6,
+    "sessionCode":  "BZ6KWN",
+    "createdAt":  "2026-03-03T07:36:41.870Z",
+    "players":  [
+                    {
+                        "playerId":  7,
+                        "displayName":  "Ana",
+                        "joinedAt":  "2026-03-03T07:37:47.221Z"
+                    }
+                ]
+}
+PS C:\Users\gianm\Team22_PokerCircle> Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/sessions/$($session.sessionCode)/join" -Body '{"displayName":"Bob"}' -ContentType "application/json" | ConvertTo-Json -Depth 5
+{
+    "sessionId":  6,
+    "sessionCode":  "BZ6KWN",
+    "createdAt":  "2026-03-03T07:36:41.870Z",
+    "players":  [
+                    {
+                        "playerId":  7,
+                        "displayName":  "Ana",
+                        "joinedAt":  "2026-03-03T07:37:47.221Z"
+                    },
+                    {
+                        "playerId":  8,
+                        "displayName":  "Bob",
+                        "joinedAt":  "2026-03-03T07:37:57.927Z"
+                    }
+                ]
+}
+PS C:\Users\gianm\Team22_PokerCircle> Invoke-RestMethod -Method Get -Uri "http://localhost:3000/api/sessions/$($session.sessionCode)" | ConvertTo-Json -Depth 5
+{
+    "sessionId":  6,
+    "sessionCode":  "BZ6KWN",
+    "createdAt":  "2026-03-03T07:36:41.870Z",
+    "players":  [
+                    {
+                        "playerId":  7,
+                        "displayName":  "Ana",
+                        "joinedAt":  "2026-03-03T07:37:47.221Z"
+                    },
+                    {
+                        "playerId":  8,
+                        "displayName":  "Bob",
+                        "joinedAt":  "2026-03-03T07:37:57.927Z"
+                    }
+                ]
+}
+PS C:\Users\gianm\Team22_PokerCircle> 
+
+ERROR:  duplicate key value violates unique constraint "game_sessions_sessioncode_key"
+Key (sessioncode)=(DUP123) already exists. 
+
+SQL state: 23505
+Detail: Key (sessioncode)=(DUP123) already exists.
+
+ERROR:  insert or update on table "players" violates foreign key constraint "fk_players_session"
+Key (sessionid)=(999999) is not present in table "game_sessions". 
+
+SQL state: 23503
+Detail: Key (sessionid)=(999999) is not present in table "game_sessions".

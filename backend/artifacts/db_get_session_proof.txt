@@ -1,0 +1,30 @@
+DB GET Session + Players Proof (TM22-60)
+
+Create session:
+POST http://localhost:3000/api/sessions
+
+Response:
+{
+  "sessionId": 6,
+  "sessionCode": "BZ6KWN",
+  "createdAt": "2026-03-03T07:36:41.870Z",
+  "players": []
+}
+
+Join players:
+POST http://localhost:3000/api/sessions/BZ6KWN/join  body: {"displayName":"Ana"}
+POST http://localhost:3000/api/sessions/BZ6KWN/join  body: {"displayName":"Bob"}
+
+Fetch lobby state:
+GET http://localhost:3000/api/sessions/BZ6KWN
+
+Response:
+{
+  "sessionId": 6,
+  "sessionCode": "BZ6KWN",
+  "createdAt": "2026-03-03T07:36:41.870Z",
+  "players": [
+    { "playerId": 7, "displayName": "Ana", "joinedAt": "2026-03-03T07:37:47.221Z" },
+    { "playerId": 8, "displayName": "Bob", "joinedAt": "2026-03-03T07:37:57.927Z" }
+  ]
+}
