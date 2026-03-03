@@ -1,6 +1,34 @@
-# Artifact: Logical Data Structure (Simplified Poker Ledger)
+# Artifact: Logical Data Structure (PokerCircle)
 
-## 1. Schema Map
+## 1. Implemented Now (Sprint 4): Lobby State
+
+These tables support creating a lobby, joining a lobby, and fetching lobby state (session + players).
+
+### game_sessions (Lobby Rooms)
+- `id`: SERIAL (PK)
+- `sessionCode`: TEXT (UNIQUE, NOT NULL)
+- `createdAt`: TIMESTAMPTZ (DEFAULT NOW(), NOT NULL)
+
+Notes:
+- This is the PokerCircle lobby/session concept (e.g., "ABC123").
+- This is NOT the same as the `"session"` table used by express-session.
+
+### players (Lobby Membership)
+- `id`: SERIAL (PK)
+- `sessionId`: INTEGER (FK → `game_sessions.id`, NOT NULL, ON DELETE CASCADE)
+- `displayName`: TEXT (NOT NULL)
+- `joinedAt`: TIMESTAMPTZ (DEFAULT NOW(), NOT NULL)
+
+Constraints:
+- `sessionId` must reference a valid lobby session.
+- `displayName` cannot be null.
+- `UNIQUE(sessionId, displayName)` prevents duplicate names in the same lobby.
+
+---
+
+## 2. Planned Later: Logical Data Structure (Simplified Poker Ledger)
+
+This section is our long-term plan for tracking money/chips across games.
 
 ### Users (Accounts & Global Wallet)
 - `user_id`: UUID (PK)
