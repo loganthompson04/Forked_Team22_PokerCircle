@@ -41,7 +41,11 @@ router.get('/:sessionCode', asyncHandler(async (req: Request, res: Response) => 
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
-  return res.json(session);
+  return res.status(200).json({
+    sessionCode: session.sessionCode,
+    createdAt: session.createdAt,
+    players: session.players,
+  });
 }));
 
 export default router;

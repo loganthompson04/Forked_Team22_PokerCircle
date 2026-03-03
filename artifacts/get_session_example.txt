@@ -1,0 +1,19 @@
+# Create session
+curl.exe -i -X POST http://localhost:3000/api/sessions
+
+HTTP/1.1 201 Created
+{"sessionCode":"34ZRHE","createdAt":"2026-03-03T00:07:55.643Z","players":[]}
+
+
+# Successful GET after creating session
+curl.exe -i http://localhost:3000/api/sessions/38V45J
+
+HTTP/1.1 200 OK
+{"sessionCode":"38V45J","createdAt":"2026-03-03T00:06:56.722Z","players":[]}
+
+
+# 404 for invalid session code
+curl.exe -i http://localhost:3000/api/sessions/ABC123
+
+HTTP/1.1 404 Not Found
+{"error":"Session not found"}
