@@ -13,13 +13,15 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 // Wrap Express in an HTTP server
 const httpServer = http.createServer(app);
 
-// Attach Socket.IO
+// Attach Socket.IO (also set on app so route handlers can emit events)
 const io = new Server(httpServer, {
   cors:
     process.env.NODE_ENV !== "production"
       ? { origin: "*", methods: ["GET", "POST"] }
       : { origin: false },
 });
+
+app.set('io', io);
 
 io.on("connection", (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -37,7 +39,7 @@ io.on("connection", (socket: Socket) => {
 
     const code = session.sessionCode;
 
-    const player = { playerId: socket.id, name: playerName };
+    const player = { playerId: socket.id, name: playerName, isReady: false };
 
     if (!session.players.some((p) => p.playerId === socket.id)) {
       addPlayer(code, player);

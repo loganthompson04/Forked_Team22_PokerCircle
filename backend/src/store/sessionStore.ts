@@ -23,7 +23,21 @@ export function addPlayer(sessionCode: string, player: Player): boolean {
   const code = normalizeSessionCode(sessionCode);
   const session = sessions.get(code);
   if (!session) return false;
-  session.players.push(player);
+  session.players.push({ ...player, isReady: player.isReady ?? false });
+  return true;
+}
+
+export function setPlayerReadyByName(
+  sessionCode: string,
+  name: string,
+  isReady: boolean
+): boolean {
+  const code = normalizeSessionCode(sessionCode);
+  const session = sessions.get(code);
+  if (!session) return false;
+  const player = session.players.find((p) => p.name === name);
+  if (!player) return false;
+  player.isReady = isReady;
   return true;
 }
 
