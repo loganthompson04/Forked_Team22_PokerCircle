@@ -5,7 +5,6 @@ import type { RootStackParamList } from '../../App';
 import type { Player } from '../types/session';
 import { socket } from '../services/socket';
 import { colors } from '../theme/colors';
-import { getSession } from '../api/api';
 
 type Props = StackScreenProps<RootStackParamList, 'Lobby'>;
 
@@ -19,9 +18,6 @@ const BACKEND_URL = 'http://localhost:3000';
 export default function LobbyScreen({ route, navigation }: Props) {
   const { sessionCode, devPlayerName } = route.params;
   const [players, setPlayers] = useState<Player[]>([]);
-  const [myPlayerName, setMyPlayerName] = useState<string | null>(null);
-  const [myIsReady, setMyIsReady] = useState(false);
-  const [isHost, setIsHost] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
@@ -215,27 +211,6 @@ export default function LobbyScreen({ route, navigation }: Props) {
           </View>
         }
       />
-
-      <View style={styles.footer}>
-        {isHost && (
-          <Pressable
-            style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
-            onPress={handleStartGame}
-          >
-            <Text style={styles.startButtonText}>Start Game</Text>
-          </Pressable>
-        )}
-
-        <Pressable
-          style={[styles.readyButton, myIsReady && styles.readyButtonActive]}
-          onPress={handleReadyToggle}
-          disabled={myPlayerName === null}
-        >
-          <Text style={styles.readyButtonText}>
-            {myIsReady ? 'Unready' : 'Ready'}
-          </Text>
-        </Pressable>
-      </View>
     </SafeAreaView>
   );
 }
@@ -312,8 +287,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   playerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 16,
     backgroundColor: colors.inputBackground,
@@ -323,7 +296,6 @@ const styles = StyleSheet.create({
     borderColor: colors.inputBorder,
   },
   playerName: {
-    flex: 1,
     fontSize: 16,
     color: colors.text,
     fontWeight: '600',
@@ -369,40 +341,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: colors.textOnPrimary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    paddingTop: 8,
-    gap: 10,
-  },
-  startButton: {
-    backgroundColor: READY_GREEN,
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  startButtonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  readyButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  readyButtonActive: {
-    backgroundColor: READY_GREEN,
-  },
-  readyButtonText: {
     color: colors.textOnPrimary,
     fontSize: 16,
     fontWeight: '600',
