@@ -9,6 +9,7 @@ type Props = StackScreenProps<RootStackParamList, 'JoinSession'>;
 export default function JoinSessionScreen({ navigation, route }: Props) {
   const [sessionCode, setSessionCode] = useState('');
   const [playerName, setPlayerName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const devMode = route.params?.devMode;
 
   const isValid = sessionCode.length === 6 && (!devMode || playerName.trim().length > 0);
@@ -18,6 +19,10 @@ export default function JoinSessionScreen({ navigation, route }: Props) {
   }
 
   function handleJoin() {
+    if (!isValid || isSubmitting) return;
+
+    setIsSubmitting(true);
+
     navigation.navigate('Lobby', {
       sessionCode,
       ...(devMode ? { devPlayerName: playerName.trim() } : {}),
@@ -56,12 +61,18 @@ export default function JoinSessionScreen({ navigation, route }: Props) {
           placeholderTextColor={colors.placeholder}
         />
 
+        {sessionCode.length > 0 && sessionCode.length < 6 && (
+          <Text style={styles.helperText}>Session code must be 6 characters.</Text>
+        )}
+
         <Pressable
-          style={[styles.button, !isValid && styles.buttonDisabled]}
+          style={[styles.button, (!isValid || isSubmitting) && styles.buttonDisabled]}
           onPress={handleJoin}
-          disabled={!isValid}
+          disabled={!isValid || isSubmitting}
         >
-          <Text style={styles.buttonText}>Join Game</Text>
+          <Text style={styles.buttonText}>
+            {isSubmitting ? 'Joining...' : 'Join Game'}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -104,6 +115,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.text,
     marginBottom: 24,
+  },
+  helperText: {
+    width: '100%',
+    color: colors.placeholder,
+    fontSize: 14,
+    marginTop: -12,
+    marginBottom: 20,
+    textAlign: 'left',
   },
   button: {
     width: '100%',
