@@ -6,6 +6,7 @@ import { generateSessionCode } from "../utils/sessionCode";
 import type { Server } from "socket.io";
 import { setPlayerReadyByName, getSession } from "../store/sessionStore";
 import type { LobbyUpdatePayload } from "../types/socketEvents";
+import type { SessionInvite } from "../types/invite";
 
 
 const router = Router();
@@ -267,6 +268,108 @@ router.post(
     io.to(sessionCode).emit("game:start", { sessionCode });
 
     return res.status(200).json({ message: "Game started", sessionCode });
+  })
+);
+
+router.post(
+  "/:sessionCode/invite",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { sessionCode } = req.params as { sessionCode: string };
+    const { inviteeId } = req.body as { inviteeId?: string };
+    const hostUserId = req.session.userId!;
+
+    // 1. Validate inviteeId is present
+    if (!inviteeId || inviteeId.trim().length === 0) {
+      return res.status(400).json({ error: "inviteeId is required" });
+    }
+
+    // 2. Fetch session and validate it exists and hasn't started
+    const sessionResult = await pool.query(
+      `SELECT session_code, host_user_id, status FROM game_sessions WHERE session_code = $1`,
+      [sessionCode]
+    );
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const session = sessionResult.rows[0];
+    if (session.status === "active") {
+      return res.status(400).json({ error: "Game has already started" });
+    }
+
+    // 3. Verify caller is the host
+    if (session.host_user_id !== hostUserId) {
+      return res.status(403).json({ error: "Only the host can send invites" });
+    }
+
+    // 4. Verify invitee exists
+    const inviteeResult = await pool.query(
+      `SELECT user_id FROM users WHERE user_id = $1`,
+      [inviteeId]
+    );
+    if (inviteeResult.rows.length === 0) {
+      return res.status(404).json({ error: "Invitee not found" });
+    }
+
+    // 5. Verify accepted friendship in either direction
+    const friendshipResult = await pool.query(
+      `
+      SELECT id FROM friendships
+      WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+        AND status = 'accepted'
+      `,
+      [hostUserId, inviteeId]
+    );
+    if (friendshipResult.rows.length === 0) {
+      return res.status(403).json({ error: "You can only invite friends" });
+    }
+
+    // 6. Verify invitee is not already a player in the session
+    const playerResult = await pool.query(
+      `SELECT id FROM session_players WHERE session_code = $1 AND display_name = (
+        SELECT username FROM users WHERE user_id = $2
+      )`,
+      [sessionCode, inviteeId]
+    );
+    if (playerResult.rows.length > 0) {
+      return res.status(409).json({ error: "User is already in the session" });
+    }
+
+    // 7. Insert invite (handle duplicate)
+    let invite: SessionInvite;
+    try {
+      const insertResult = await pool.query<SessionInvite>(
+        `
+        INSERT INTO session_invites (session_code, inviter_id, invitee_id)
+        VALUES ($1, $2, $3)
+        RETURNING
+          id,
+          session_code AS "sessionCode",
+          inviter_id   AS "inviterId",
+          invitee_id   AS "inviteeId",
+          status,
+          created_at   AS "createdAt"
+        `,
+        [sessionCode, hostUserId, inviteeId]
+      );
+      invite = insertResult.rows[0] as SessionInvite;
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === "23505") {
+        return res.status(409).json({ error: "Already invited" });
+      }
+      throw err;
+    }
+
+    // 8. Emit real-time notification to the invitee's user room
+    const io: Server = req.app.get("io");
+    const inviterResult = await pool.query(
+      `SELECT username FROM users WHERE user_id = $1`,
+      [hostUserId]
+    );
+    const inviterUsername: string = inviterResult.rows[0]?.username ?? "Unknown";
+    io.to(`user:${inviteeId}`).emit("user:invite", { ...invite, inviterUsername });
+
+    return res.status(201).json({ ...invite, inviterUsername });
   })
 );
 

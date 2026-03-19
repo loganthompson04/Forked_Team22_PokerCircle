@@ -1,5 +1,7 @@
 import express from "express";
 import sessionsRouter from "./routes/sessions";
+import invitesRouter from "./routes/invites";
+import friendsRouter from "./routes/friends";
 import { notFound, errorHandler } from "./middleware/errorMiddleware";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -55,6 +57,8 @@ app.use(session(sessionConfig));
 // routes
 app.use("/api/auth", authRouter);
 app.use("/api/sessions", sessionsRouter);
+app.use("/api/invites", invitesRouter);
+app.use("/api/friends", friendsRouter);
 
 app.get("/ping", (req, res) => {
   res.json({ message: "pong" });

@@ -6,8 +6,9 @@ import { colors } from '../theme/colors';
 
 type Props = StackScreenProps<RootStackParamList, 'JoinSession'>;
 
-export default function JoinSessionScreen({ navigation }: Props) {
-  const [sessionCode, setSessionCode] = useState('');
+export default function JoinSessionScreen({ navigation, route }: Props) {
+  const preFilledCode = route.params?.preFilledCode ?? '';
+  const [sessionCode, setSessionCode] = useState(preFilledCode);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isValid = sessionCode.length === 6;

@@ -10,15 +10,17 @@ import SignupScreen from './src/screens/SignupScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import GameScreen from './src/screens/GameScreen';
+import InviteFriendsScreen from './src/screens/InviteFriendsScreen';
 
 export type RootStackParamList = {
   Welcome: undefined;
   Login: undefined;
   Signup: undefined;
   Home: undefined;
-  JoinSession: undefined;
+  JoinSession: { preFilledCode?: string } | undefined;
   Lobby: { sessionCode: string };
   FindFriends: undefined;
+  InviteFriends: { sessionCode: string };
   Game: { sessionCode: string };
 };
 
@@ -36,6 +38,7 @@ export default function App() {
         <Stack.Screen name="JoinSession" component={JoinSessionScreen} />
         <Stack.Screen name="Lobby" component={LobbyScreen} />
         <Stack.Screen name="FindFriends" component={FindFriendsScreen} />
+        <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: 'Invite Friends' }} />
         <Stack.Screen name="Game" component={GameScreen} />
       </Stack.Navigator>
     </NavigationContainer>

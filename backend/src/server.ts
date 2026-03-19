@@ -30,6 +30,11 @@ app.set('io', io);
 io.on("connection", (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
 
+  socket.on("user:joinRoom", (userId: string) => {
+    socket.join(`user:${userId}`);
+    console.log(`Socket ${socket.id} joined user room: user:${userId}`);
+  });
+
   socket.on("session:joinRoom", ({ sessionCode, playerName }: JoinRoomPayload) => {
     let session = getSession(sessionCode);
     if (!session) {

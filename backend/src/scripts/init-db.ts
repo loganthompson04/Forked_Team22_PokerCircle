@@ -62,6 +62,31 @@ const initDb = async () => {
       );
     `);
 
+    // Friendships (minimal — needed for invite authorization)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS friendships (
+        id           SERIAL PRIMARY KEY,
+        requester_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        addressee_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        status       TEXT NOT NULL DEFAULT 'pending',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT unique_friendship UNIQUE (requester_id, addressee_id)
+      );
+    `);
+
+    // Session invites
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS session_invites (
+        id           SERIAL PRIMARY KEY,
+        session_code TEXT NOT NULL REFERENCES game_sessions(session_code) ON DELETE CASCADE,
+        inviter_id   UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        invitee_id   UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        status       TEXT NOT NULL DEFAULT 'pending',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT unique_invite UNIQUE (session_code, invitee_id)
+      );
+    `);
+
     console.log("Tables created successfully.");
   } catch (error) {
     console.error("Error creating tables:", error);

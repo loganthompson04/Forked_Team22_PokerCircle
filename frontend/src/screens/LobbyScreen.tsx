@@ -276,6 +276,13 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
       {isHost && (
         <View style={styles.startButtonContainer}>
+          <Pressable
+            style={({ pressed }) => [styles.inviteButton, pressed && styles.inviteButtonPressed]}
+            onPress={() => navigation.navigate('InviteFriends', { sessionCode })}
+          >
+            <Text style={styles.inviteButtonText}>Invite Friends</Text>
+          </Pressable>
+
           {!allReady && (
             <Text style={styles.waitingText}>
               {players.length < 2
@@ -351,4 +358,14 @@ const styles = StyleSheet.create({
   },
   startButtonDisabled: { opacity: 0.4 },
   startButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '700' },
+  inviteButton: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inviteButtonPressed: { opacity: 0.85 },
+  inviteButtonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
 });
