@@ -4,6 +4,7 @@ import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import type { Player } from '../types/session';
 import { socket } from '../services/socket';
+import { getSession } from '../api/api';
 import { colors } from '../theme/colors';
 
 type Props = StackScreenProps<RootStackParamList, 'Lobby'>;
@@ -90,38 +91,38 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     async function init() {
       try {
-        if (devPlayerName !== undefined) {
-          resolvedPlayerNameRef.current = devPlayerName;
-        } else {
-          const res = await fetch(`${BACKEND_URL}/api/auth/me`, {
-            credentials: 'include',
-          });
-          if (!res.ok) {
-            if (active) {
-              setError('Not authenticated. Please log in again.');
-              setIsJoining(false);
-            }
-            return;
-          }
-          const data = (await res.json()) as { username: string };
-          if (!active) return;
-          resolvedPlayerNameRef.current = data.username;
-        }
+        let playerName: string;
+        let myUserId: string | null = null;
 
-        // Check if this player is the host
-        const sessionRes = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}`, {
+        // Attempt auth fetch always
+        const authRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           credentials: 'include',
         });
-        if (sessionRes.ok) {
-          const sessionData = await sessionRes.json() as {
-            hostUserId: number;
-            players: Player[];
-          };
-          const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' });
-          if (meRes.ok) {
-            const me = await meRes.json() as { userId: number };
-            if (active) setIsHost(me.userId === sessionData.hostUserId);
+
+        if (authRes.ok) {
+          const authData = (await authRes.json()) as { userID: string; username: string };
+          myUserId = authData.userID;
+          // Only use auth username when not in dev mode
+          playerName = devPlayerName !== undefined ? devPlayerName : authData.username;
+        } else {
+          // Auth failed — fatal in production, graceful in dev mode
+          if (devPlayerName === undefined) {
+            if (active) setError('Not authenticated. Please log in again.');
+            return;
           }
+          // Dev mode: no cookie, continue without userId (isHost stays false)
+          playerName = devPlayerName;
+        }
+
+        if (!active) return;
+        resolvedPlayerNameRef.current = playerName;
+
+        // Fetch session to determine host
+        try {
+          const session = await getSession(sessionCode);
+          if (active) setIsHost(session.hostUserId === myUserId);
+        } catch (err) {
+          console.error('LobbyScreen: Error fetching session:', err);
         }
 
         socket.on('lobby:update', handleLobbyUpdate);
@@ -159,6 +160,30 @@ export default function LobbyScreen({ route, navigation }: Props) {
     const timer = setTimeout(() => setStatusMessage(null), 2500);
     return () => clearTimeout(timer);
   }, [statusMessage]);
+
+  async function handleReadyToggle() {
+    const myPlayerName = resolvedPlayerNameRef.current;
+    if (!myPlayerName) return;
+    const myIsReady = players.find(p => p.name === myPlayerName)?.isReady ?? false;
+    const next = !myIsReady;
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/sessions/${sessionCode}/ready`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ displayName: myPlayerName, isReady: next }),
+        }
+      );
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        setError(body.error ?? 'Failed to update ready status.');
+      }
+    } catch {
+      setError('Could not reach server.');
+    }
+  }
 
   useEffect(() => {
     if (!startError) return;

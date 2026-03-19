@@ -24,6 +24,7 @@ export default function LoginScreen({ navigation }: Props) {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 

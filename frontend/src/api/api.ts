@@ -3,7 +3,9 @@ import type { Session } from '../types/session';
 const BASE_URL = 'http://localhost:3000';
 
 export async function getSession(sessionCode: string): Promise<Session> {
-  const response = await fetch(`${BASE_URL}/api/sessions/${sessionCode}`);
+  const response = await fetch(`${BASE_URL}/api/sessions/${sessionCode}`, {
+    credentials: 'include',
+  });
   if (response.status === 404) {
     throw Object.assign(new Error('Session not found'), { statusCode: 404 });
   }

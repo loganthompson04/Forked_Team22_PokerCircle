@@ -14,12 +14,13 @@ const app = express();
 const PgStore = connectPgSimple(session);
 
 app.use(express.json());
-// DEV CORS: allow requests from Expo / devices during local testing
+// DEV CORS: allow requests from Expo Web during local testing
 if (process.env.NODE_ENV !== "production") {
   app.use(
     cors({
-      origin: "*",
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      origin: process.env.WEB_ORIGIN ?? 'http://localhost:8081',
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     })
   );
 } else {

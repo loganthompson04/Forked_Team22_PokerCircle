@@ -8,6 +8,7 @@ export const socket = io(BACKEND_URL, {
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
   timeout: 10000,
+  withCredentials: true,
 });
 
 socket.on('connect', () => {
