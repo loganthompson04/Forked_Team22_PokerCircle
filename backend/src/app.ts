@@ -11,6 +11,7 @@ import debugRouter from "./routes/debug";
 import authRouter from "./routes/auth";
 
 const app = express();
+app.set("trust proxy", 1); // Required on Railway — tells Express to trust the HTTPS proxy
 const PgStore = connectPgSimple(session);
 
 app.use(express.json());
