@@ -25,12 +25,14 @@ router.get(
         si.created_at    AS "createdAt"
       FROM session_invites si
       JOIN users u ON u.user_id = si.inviter_id
-      WHERE si.invitee_id = $1 AND si.status = 'pending'
+      JOIN game_sessions gs ON gs.session_code = si.session_code
+      WHERE si.invitee_id = $1 AND si.status = 'pending' AND gs.status = 'lobby'
       ORDER BY si.created_at DESC
       `,
       [userId]
     );
 
+    res.set('Cache-Control', 'no-store');
     return res.json({ invites: result.rows });
   })
 );

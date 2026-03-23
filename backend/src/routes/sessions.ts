@@ -335,29 +335,45 @@ router.post(
       return res.status(409).json({ error: "User is already in the session" });
     }
 
-    // 7. Insert invite (handle duplicate)
+    // 7. Insert or re-activate invite; if already pending, fetch existing to re-notify
+    const insertResult = await pool.query<SessionInvite>(
+      `
+      INSERT INTO session_invites (session_code, inviter_id, invitee_id)
+      VALUES ($1, $2, $3)
+      ON CONFLICT ON CONSTRAINT unique_invite
+        DO UPDATE SET status = 'pending', created_at = NOW()
+        WHERE session_invites.status IN ('declined', 'accepted')
+      RETURNING
+        id,
+        session_code AS "sessionCode",
+        inviter_id   AS "inviterId",
+        invitee_id   AS "inviteeId",
+        status,
+        created_at   AS "createdAt"
+      `,
+      [sessionCode, hostUserId, inviteeId]
+    );
+
+    // If no rows returned the invite is already pending — fetch it to re-emit the notification
     let invite: SessionInvite;
-    try {
-      const insertResult = await pool.query<SessionInvite>(
+    let isNew = true;
+    if (insertResult.rows.length === 0) {
+      const existingResult = await pool.query<SessionInvite>(
         `
-        INSERT INTO session_invites (session_code, inviter_id, invitee_id)
-        VALUES ($1, $2, $3)
-        RETURNING
-          id,
-          session_code AS "sessionCode",
-          inviter_id   AS "inviterId",
-          invitee_id   AS "inviteeId",
-          status,
-          created_at   AS "createdAt"
+        SELECT id, session_code AS "sessionCode", inviter_id AS "inviterId",
+               invitee_id AS "inviteeId", status, created_at AS "createdAt"
+        FROM session_invites
+        WHERE session_code = $1 AND invitee_id = $2
         `,
-        [sessionCode, hostUserId, inviteeId]
+        [sessionCode, inviteeId]
       );
-      invite = insertResult.rows[0] as SessionInvite;
-    } catch (err: unknown) {
-      if ((err as { code?: string })?.code === "23505") {
+      if (existingResult.rows.length === 0) {
         return res.status(409).json({ error: "Already invited" });
       }
-      throw err;
+      invite = existingResult.rows[0] as SessionInvite;
+      isNew = false;
+    } else {
+      invite = insertResult.rows[0] as SessionInvite;
     }
 
     // 8. Emit real-time notification to the invitee's user room
@@ -369,7 +385,7 @@ router.post(
     const inviterUsername: string = inviterResult.rows[0]?.username ?? "Unknown";
     io.to(`user:${inviteeId}`).emit("user:invite", { ...invite, inviterUsername });
 
-    return res.status(201).json({ ...invite, inviterUsername });
+    return res.status(isNew ? 201 : 200).json({ ...invite, inviterUsername });
   })
 );
 

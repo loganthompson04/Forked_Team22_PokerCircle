@@ -10,15 +10,16 @@ type Props = StackScreenProps<RootStackParamList, 'Login'>;
 export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'main' | 'demo1' | 'demo2' | null>(null);
 
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+    if (loading) return;
 
-    setLoading(true);
+    setLoading('main');
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
@@ -40,12 +41,14 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert('Error', 'Could not connect to server');
       console.error(error);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
-  const handleDemoLogin = async (demoEmail: string, demoPassword: string) => {
-    setLoading(true);
+  const handleDemoLogin = async (key: 'demo1' | 'demo2', demoEmail: string, demoPassword: string) => {
+    if (loading) return;
+
+    setLoading(key);
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
@@ -65,7 +68,7 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert('Error', 'Could not connect to server');
       console.error(error);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
@@ -95,9 +98,9 @@ export default function LoginScreen({ navigation }: Props) {
       <Pressable
         style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
         onPress={handleLogin}
-        disabled={loading}
+        disabled={loading !== null}
       >
-        {loading ? (
+        {loading === 'main' ? (
           <ActivityIndicator color={colors.textOnPrimary} />
         ) : (
           <Text style={styles.buttonText}>Login</Text>
@@ -108,17 +111,25 @@ export default function LoginScreen({ navigation }: Props) {
         <Text style={styles.demoLabel}>Quick Login (Testing)</Text>
         <Pressable
           style={({ pressed }) => [styles.demoButton, pressed && styles.buttonPressed]}
-          onPress={() => handleDemoLogin('demo1@pokercircle.dev', '000000')}
-          disabled={loading}
+          onPress={() => handleDemoLogin('demo1', 'demo1@pokercircle.dev', '000000')}
+          disabled={loading !== null}
         >
-          <Text style={styles.demoButtonText}>Login as Demo 1</Text>
+          {loading === 'demo1' ? (
+            <ActivityIndicator color={colors.text} size="small" />
+          ) : (
+            <Text style={styles.demoButtonText}>Login as Demo 1</Text>
+          )}
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.demoButton, pressed && styles.buttonPressed]}
-          onPress={() => handleDemoLogin('demo2@pokercircle.dev', '000000')}
-          disabled={loading}
+          onPress={() => handleDemoLogin('demo2', 'demo2@pokercircle.dev', '000000')}
+          disabled={loading !== null}
         >
-          <Text style={styles.demoButtonText}>Login as Demo 2</Text>
+          {loading === 'demo2' ? (
+            <ActivityIndicator color={colors.text} size="small" />
+          ) : (
+            <Text style={styles.demoButtonText}>Login as Demo 2</Text>
+          )}
         </Pressable>
       </View>
 

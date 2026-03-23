@@ -109,6 +109,18 @@ export default function LobbyScreen({ route, navigation }: Props) {
         if (!active) return;
         resolvedPlayerNameRef.current = playerName;
 
+        // Register player in DB (ignore 409 = already joined)
+        try {
+          await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ displayName: playerName }),
+          });
+        } catch {
+          // non-critical — socket join still proceeds
+        }
+
         // Fetch session to determine host
         try {
           const session = await getSession(sessionCode);
@@ -125,6 +137,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
         socket.on('connect_error', handleConnectError);
 
         socket.connect();
+        if (socket.connected) {
+          socket.emit('session:joinRoom', {
+            sessionCode,
+            playerName: resolvedPlayerNameRef.current,
+          });
+        }
       } catch (err) {
         if (active) {
           setError('Could not connect to server.');
@@ -254,17 +272,31 @@ export default function LobbyScreen({ route, navigation }: Props) {
       <FlatList
         data={players}
         keyExtractor={(item) => item.playerId}
-        renderItem={({ item, index }) => (
-          <View style={styles.playerRow}>
-            <View>
-              <Text style={styles.playerName}>{item.name}</Text>
-              <Text style={styles.playerLabel}>Player {index + 1}</Text>
+        renderItem={({ item, index }) => {
+          const isMe = item.name === resolvedPlayerNameRef.current;
+          return (
+            <View style={styles.playerRow}>
+              <View>
+                <Text style={styles.playerName}>{item.name}</Text>
+                <Text style={styles.playerLabel}>Player {index + 1}</Text>
+              </View>
+              {isMe ? (
+                <Pressable
+                  onPress={handleReadyToggle}
+                  style={[styles.readyButton, item.isReady && styles.readyButtonActive]}
+                >
+                  <Text style={[styles.readyButtonText, item.isReady && styles.readyButtonTextActive]}>
+                    {item.isReady ? 'Ready' : 'Ready Up'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={item.isReady ? styles.readyBadge : styles.notReadyBadge}>
+                  {item.isReady ? 'Ready' : 'Not Ready'}
+                </Text>
+              )}
             </View>
-            <Text style={item.isReady ? styles.readyBadge : styles.notReadyBadge}>
-              {item.isReady ? 'Ready' : 'Not Ready'}
-            </Text>
-          </View>
-        )}
+          );
+        }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -340,6 +372,19 @@ const styles = StyleSheet.create({
   playerLabel: { marginTop: 4, fontSize: 12, color: colors.placeholder },
   readyBadge: { fontSize: 12, fontWeight: '600', color: colors.primary },
   notReadyBadge: { fontSize: 12, fontWeight: '600', color: colors.placeholder },
+  readyButton: {
+    borderWidth: 1,
+    borderColor: colors.placeholder,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  readyButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  readyButtonText: { fontSize: 12, fontWeight: '600', color: colors.placeholder },
+  readyButtonTextActive: { color: colors.textOnPrimary },
   emptyState: { marginTop: 48, alignItems: 'center', paddingHorizontal: 24 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8 },
   emptyText: { textAlign: 'center', color: colors.placeholder, fontSize: 16 },
