@@ -208,11 +208,13 @@ export default function LobbyScreen({ route, navigation }: Props) {
   const handleStartGame = async () => {
     setIsStarting(true);
     setStartError(null);
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/start`, {
         method: 'POST',
         credentials: 'include',
       });
+
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
         setStartError(data.error ?? 'Failed to start game.');
@@ -278,6 +280,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         keyExtractor={(item) => item.playerId}
         renderItem={({ item, index }) => {
           const isMe = item.name === resolvedPlayerNameRef.current;
+
           return (
             <View style={styles.playerRow}>
               <View>
@@ -336,6 +339,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
                 : 'Waiting for all players to ready up...'}
             </Text>
           )}
+
           <Pressable
             style={[
               styles.startButton,
