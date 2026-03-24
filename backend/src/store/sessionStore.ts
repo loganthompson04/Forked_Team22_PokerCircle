@@ -1,6 +1,35 @@
-import { Player, Session } from "../types/session";
+/**
+ * In-memory session store for Socket.IO room state.
+ *
+ * This is intentionally kept lightweight — it only tracks what the
+ * socket layer needs (ready state, player identity) and is NOT the
+ * source of truth for financial data.  Financial data lives in the DB
+ * and is accessed via sessionDbStore.
+ */
 
-const sessions = new Map<string, Session>();
+// ---------------------------------------------------------------------------
+// Types — deliberately separate from the DB types in ../types/session.ts
+// so the socket store doesn't drag in DB-only fields.
+// ---------------------------------------------------------------------------
+
+export interface SocketPlayer {
+  playerId: string; // socket.id
+  name: string;
+  isReady: boolean;
+}
+
+export interface SocketSession {
+  sessionCode: string;
+  createdAt: string;
+  hostUserId?: string;
+  players: SocketPlayer[];
+}
+
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
+
+const sessions = new Map<string, SocketSession>();
 
 function normalizeSessionCode(sessionCode: string): string {
   return sessionCode.trim().toUpperCase();
@@ -10,16 +39,16 @@ export function hasSession(sessionCode: string): boolean {
   return sessions.has(normalizeSessionCode(sessionCode));
 }
 
-export function createSession(session: Session): void {
+export function createSession(session: SocketSession): void {
   const code = normalizeSessionCode(session.sessionCode);
   sessions.set(code, { ...session, sessionCode: code });
 }
 
-export function getSession(sessionCode: string): Session | null {
+export function getSession(sessionCode: string): SocketSession | null {
   return sessions.get(normalizeSessionCode(sessionCode)) ?? null;
 }
 
-export function addPlayer(sessionCode: string, player: Player): boolean {
+export function addPlayer(sessionCode: string, player: SocketPlayer): boolean {
   const code = normalizeSessionCode(sessionCode);
   const session = sessions.get(code);
   if (!session) return false;

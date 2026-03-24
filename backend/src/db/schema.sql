@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS session_players (
   display_name TEXT NOT NULL,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   is_ready BOOLEAN NOT NULL DEFAULT FALSE
+  buy_in Integer Default 0,
+  rebuy_total Integer Default 0,
+  cash_out Integer Default 0,
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_players_session_code

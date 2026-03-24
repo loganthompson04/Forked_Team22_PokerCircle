@@ -1,21 +1,25 @@
-import http from "http";
-import { Server, Socket } from "socket.io";
-import dotenv from "dotenv";
-import app from "./app";
-import { addPlayer, createSession, getSession, removePlayer } from "./store/sessionStore";
-import type { JoinRoomPayload, LobbyUpdatePayload } from "./types/socketEvents";
+import http from 'http';
+import { Server, Socket } from 'socket.io';
+import dotenv from 'dotenv';
+import app from './app';
+import {
+  addPlayer,
+  createSession,
+  getSession,
+  removePlayer,
+} from './store/sessionStore';
+import type { SocketPlayer, SocketSession } from './store/sessionStore';
+import type { JoinRoomPayload, LobbyUpdatePayload } from './types/socketEvents';
 
 dotenv.config();
 console.log('DATABASE_URL exists:', Boolean(process.env['DATABASE_URL']));
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Wrap Express in an HTTP server
 const httpServer = http.createServer(app);
 
-// Attach Socket.IO (also set on app so route handlers can emit events)
-const rawOrigins = process.env["WEB_ORIGIN"] ?? "http://localhost:8081";
-const allowedOrigins = rawOrigins.split(",").map((o) => o.trim());
+const rawOrigins = process.env['WEB_ORIGIN'] ?? 'http://localhost:8081';
+const allowedOrigins = rawOrigins.split(',').map((o) => o.trim());
 
 const io = new Server(httpServer, {
   cors: {
@@ -25,26 +29,34 @@ const io = new Server(httpServer, {
       callback(new Error(`Socket.IO CORS: origin '${origin}' not allowed`));
     },
     credentials: true,
-    methods: ["GET", "POST"],
+    methods: ['GET', 'POST'],
   },
 });
 
 app.set('io', io);
 
-io.on("connection", (socket: Socket) => {
+io.on('connection', (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  socket.on("user:joinRoom", (userId: string) => {
+  // Join a personal room for receiving direct events (e.g. invites)
+  socket.on('user:joinRoom', (userId: string) => {
     socket.join(`user:${userId}`);
     console.log(`Socket ${socket.id} joined user room: user:${userId}`);
   });
 
-  socket.on("session:joinRoom", ({ sessionCode, playerName }: JoinRoomPayload) => {
+  socket.on('session:joinRoom', ({ sessionCode, playerName }: JoinRoomPayload) => {
     let session = getSession(sessionCode);
+
     if (!session) {
-      createSession({ sessionCode, players: [], createdAt: new Date().toISOString() });
+      const newSession: SocketSession = {
+        sessionCode,
+        players: [],
+        createdAt: new Date().toISOString(),
+      };
+      createSession(newSession);
       session = getSession(sessionCode)!;
     }
+
     if (!session) {
       socket.emit('error', { message: `Session ${sessionCode} not found` });
       return;
@@ -52,7 +64,11 @@ io.on("connection", (socket: Socket) => {
 
     const code = session.sessionCode;
 
-    const player = { playerId: socket.id, name: playerName, isReady: false };
+    const player: SocketPlayer = {
+      playerId: socket.id,
+      name: playerName,
+      isReady: false,
+    };
 
     if (!session.players.some((p) => p.playerId === socket.id)) {
       addPlayer(code, player);
@@ -65,12 +81,12 @@ io.on("connection", (socket: Socket) => {
       sessionCode: code,
       players: updated?.players ?? [],
     };
-    io.to(code).emit("lobby:update", payload);
+    io.to(code).emit('lobby:update', payload);
 
     console.log(`Joined room ${code}: ${playerName} (${socket.id})`);
   });
 
-  socket.on("disconnect", () => {
+  socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
 
     for (const room of socket.rooms) {
@@ -81,11 +97,11 @@ io.on("connection", (socket: Socket) => {
         sessionCode: room,
         players: session?.players ?? [],
       };
-      io.to(room).emit("lobby:update", payload);
+      io.to(room).emit('lobby:update', payload);
     }
   });
 });
 
-httpServer.listen(PORT, "0.0.0.0", () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
 });

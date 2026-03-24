@@ -1,65 +1,148 @@
 import pool from '../db/pool';
+import type { Player, Session } from '../types/session';
 
-export type DbPlayer = {
-  id: number;
-  displayName: string;
-  joinedAt: string;
-};
-
-export type DbSession = {
-  sessionCode: string;
-  createdAt: string;
-  players: DbPlayer[];
-};
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 function normalizeSessionCode(sessionCode: string): string {
   return sessionCode.trim().toUpperCase();
 }
 
-export async function createGameSession(): Promise<DbSession> {
-  // generate code in route (you already have generateSessionCode), then insert here if you want
-  // but keeping creation in the route is also fine. This helper is optional.
-  throw new Error('Not implemented');
-}
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export async function getSessionWithPlayers(sessionCode: string): Promise<DbSession | null> {
+export interface SessionWithPlayers extends Session {}
+
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a session and its players (including financial columns).
+ * Returns null if the session does not exist.
+ */
+export async function getSessionWithPlayers(
+  sessionCode: string
+): Promise<SessionWithPlayers | null> {
   const code = normalizeSessionCode(sessionCode);
 
   const sessionRes = await pool.query(
-    'SELECT session_code, created_at FROM game_sessions WHERE session_code = $1',
+    `SELECT session_code, host_user_id, status, game_state, created_at
+     FROM game_sessions
+     WHERE session_code = $1`,
     [code]
   );
 
-  if (sessionRes.rowCount === 0) return null;
+  if ((sessionRes.rowCount ?? 0) === 0) return null;
 
   const playersRes = await pool.query(
-    `SELECT id, display_name, joined_at
+    `SELECT id, display_name, is_ready, buy_in, rebuy_total, cash_out, joined_at
      FROM session_players
      WHERE session_code = $1
      ORDER BY joined_at ASC`,
     [code]
   );
 
+  const sessionRow = sessionRes.rows[0];
+
   return {
-    sessionCode: sessionRes.rows[0].session_code,
-    createdAt: sessionRes.rows[0].created_at,
+    sessionCode: sessionRow.session_code as string,
+    hostUserId: sessionRow.host_user_id as string,
+    status: sessionRow.status as Session['status'],
+    gameState: (sessionRow.game_state as Session['gameState']) ?? {},
+    createdAt: sessionRow.created_at as string,
     players: playersRes.rows.map((r) => ({
-      id: r.id as number,
+      playerId: String(r.id),
       displayName: r.display_name as string,
+      isReady: r.is_ready as boolean,
+      buyIn: (r.buy_in as number) ?? 0,
+      rebuyTotal: (r.rebuy_total as number) ?? 0,
+      cashOut: (r.cash_out as number) ?? 0,
       joinedAt: r.joined_at as string,
     })),
   };
 }
 
-export async function addPlayerToSession(
+/**
+ * Update one or more financial fields for a specific player in a session.
+ * Only the provided fields are updated; omitted fields are left unchanged.
+ * Returns true if a row was updated, false if the player / session was not found.
+ */
+export async function updatePlayerFinances(
   sessionCode: string,
-  displayName: string
-): Promise<DbSession | null> {
+  displayName: string,
+  finances: { buyIn?: number; rebuyTotal?: number; cashOut?: number }
+): Promise<boolean> {
   const code = normalizeSessionCode(sessionCode);
   const name = displayName.trim();
 
-  const existsRes = await pool.query('SELECT 1 FROM game_sessions WHERE session_code = $1', [code]);
-  if (existsRes.rowCount === 0) return null;
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  let paramIdx = 1;
+
+  if (finances.buyIn !== undefined) {
+    fields.push(`buy_in = $${paramIdx++}`);
+    values.push(finances.buyIn);
+  }
+  if (finances.rebuyTotal !== undefined) {
+    fields.push(`rebuy_total = $${paramIdx++}`);
+    values.push(finances.rebuyTotal);
+  }
+  if (finances.cashOut !== undefined) {
+    fields.push(`cash_out = $${paramIdx++}`);
+    values.push(finances.cashOut);
+  }
+
+  if (fields.length === 0) return false;
+
+  values.push(code, name);
+
+  const query = `
+    UPDATE session_players
+    SET ${fields.join(', ')}
+    WHERE session_code = $${paramIdx++} AND display_name = $${paramIdx++}
+  `;
+
+  const result = await pool.query(query, values);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Update a session's status column.
+ * Returns the updated row or null if not found.
+ */
+export async function updateSessionStatus(
+  sessionCode: string,
+  status: Session['status']
+): Promise<SessionWithPlayers | null> {
+  const code = normalizeSessionCode(sessionCode);
+
+  await pool.query(
+    `UPDATE game_sessions SET status = $1 WHERE session_code = $2`,
+    [status, code]
+  );
+
+  return getSessionWithPlayers(code);
+}
+
+/**
+ * Insert a new player row.  Returns the updated session, or null if the
+ * session does not exist.
+ */
+export async function addPlayerToSession(
+  sessionCode: string,
+  displayName: string
+): Promise<SessionWithPlayers | null> {
+  const code = normalizeSessionCode(sessionCode);
+  const name = displayName.trim();
+
+  const existsRes = await pool.query(
+    'SELECT 1 FROM game_sessions WHERE session_code = $1',
+    [code]
+  );
+  if ((existsRes.rowCount ?? 0) === 0) return null;
 
   await pool.query(
     'INSERT INTO session_players (session_code, display_name) VALUES ($1, $2)',
@@ -69,23 +152,21 @@ export async function addPlayerToSession(
   return getSessionWithPlayers(code);
 }
 
-export async function createSessionInDb(sessionCode: string): Promise<DbSession> {
+/**
+ * Update the is_ready flag for a player.
+ */
+export async function updatePlayerReady(
+  sessionCode: string,
+  displayName: string,
+  isReady: boolean
+): Promise<boolean> {
   const code = normalizeSessionCode(sessionCode);
 
-  const insertRes = await pool.query(
-    'INSERT INTO game_sessions (session_code) VALUES ($1) RETURNING session_code, created_at',
-    [code]
+  const result = await pool.query(
+    `UPDATE session_players SET is_ready = $1
+     WHERE session_code = $2 AND display_name = $3`,
+    [isReady, code, displayName.trim()]
   );
 
-  return {
-    sessionCode: insertRes.rows[0].session_code,
-    createdAt: insertRes.rows[0].created_at,
-    players: [],
-  };
-}
-
-export async function sessionExistsInDb(sessionCode: string): Promise<boolean> {
-  const code = normalizeSessionCode(sessionCode);
-  const res = await pool.query('SELECT 1 FROM game_sessions WHERE session_code = $1', [code]);
-  return (res.rowCount ?? 0) > 0;
+  return (result.rowCount ?? 0) > 0;
 }
