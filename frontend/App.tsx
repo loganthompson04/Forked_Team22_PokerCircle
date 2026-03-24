@@ -11,6 +11,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import GameScreen from './src/screens/GameScreen';
 import InviteFriendsScreen from './src/screens/InviteFriendsScreen';
+import ResultsScreen from './src/screens/ResultsScreen';
 
 export type RootStackParamList = {
   Welcome: undefined;
@@ -22,6 +23,8 @@ export type RootStackParamList = {
   FindFriends: undefined;
   InviteFriends: { sessionCode: string };
   Game: { sessionCode: string };
+  /** TM22-88 — session summary: net results + who-pays-who settlement */
+  Results: { sessionCode: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -38,8 +41,17 @@ export default function App() {
         <Stack.Screen name="JoinSession" component={JoinSessionScreen} />
         <Stack.Screen name="Lobby" component={LobbyScreen} />
         <Stack.Screen name="FindFriends" component={FindFriendsScreen} />
-        <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: 'Invite Friends' }} />
+        <Stack.Screen
+          name="InviteFriends"
+          component={InviteFriendsScreen}
+          options={{ title: 'Invite Friends' }}
+        />
         <Stack.Screen name="Game" component={GameScreen} />
+        <Stack.Screen
+          name="Results"
+          component={ResultsScreen}
+          options={{ headerShown: false }}          // full-screen payoff moment
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

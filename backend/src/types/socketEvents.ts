@@ -1,4 +1,4 @@
-import type { Player } from './session';
+import type { SocketPlayer } from '../store/sessionStore';
 
 export type JoinRoomPayload = {
   sessionCode: string;
@@ -7,7 +7,7 @@ export type JoinRoomPayload = {
 
 export type LobbyUpdatePayload = {
   sessionCode: string;
-  players: Player[];
+  players: SocketPlayer[];
 };
 
 export type GameStartPayload = {
