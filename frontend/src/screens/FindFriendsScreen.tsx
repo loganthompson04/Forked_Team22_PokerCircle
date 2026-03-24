@@ -116,7 +116,7 @@ export default function FindFriendsScreen(_props: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
 
       <View style={styles.content}>
         <Text style={styles.title}>Find Friends</Text>
@@ -129,7 +129,7 @@ export default function FindFriendsScreen(_props: Props) {
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="e.g. isabella24"
-          placeholderTextColor={colors.placeholder}
+          placeholderTextColor="#888"
           returnKeyType="search"
           onSubmitEditing={handleSearch}
         />
@@ -152,7 +152,7 @@ export default function FindFriendsScreen(_props: Props) {
 
         {loading && (
           <View style={styles.loadingRow}>
-            <ActivityIndicator color={colors.primary} />
+            <ActivityIndicator color="#B22222" />
             <Text style={styles.loadingText}>Searching...</Text>
           </View>
         )}
@@ -180,7 +180,7 @@ export default function FindFriendsScreen(_props: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#0D0D0D',
   },
   content: {
     flex: 1,
@@ -191,33 +191,33 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: colors.primaryDark,
+    color: '#B22222',
     marginBottom: 8,
     letterSpacing: 1,
   },
 
   label: {
     fontSize: 16,
-    color: colors.text,
+    color: '#FFFFFF',
     marginBottom: 16,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.inputBackground,
+    borderColor: '#B22222',
+    backgroundColor: '#1A1A1A',
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
     fontSize: 18,
-    color: colors.text,
+    color: '#FFFFFF',
     marginBottom: 14,
   },
 
   button: {
     width: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: '#B22222',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
 
   buttonDisabled: {
-    backgroundColor: colors.disabled,
+    backgroundColor: '#444',
   },
 
   buttonPressed: {
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    color: colors.textOnPrimary,
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
@@ -252,21 +252,21 @@ const styles = StyleSheet.create({
   },
 
   loadingText: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 14,
     marginLeft: 10,
   },
 
   emptyText: {
-    color: colors.placeholder,
+    color: '#888',
     fontSize: 14,
     paddingTop: 8,
   },
 
   resultRow: {
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.inputBackground,
+    borderColor: '#B22222',
+    backgroundColor: '#1A1A1A',
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -277,24 +277,24 @@ const styles = StyleSheet.create({
   },
 
   username: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
 
   addButton: {
-    backgroundColor: colors.primaryDark,
+    backgroundColor: '#8B0000',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
   },
 
   addButtonDisabled: {
-    backgroundColor: colors.disabled,
+    backgroundColor: '#444',
   },
 
   addButtonText: {
-    color: colors.textOnPrimary,
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
   },
