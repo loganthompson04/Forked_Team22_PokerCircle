@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { colors } from '../theme/colors';
-import { createSession, getPendingInvites, respondToInvite, getPendingFriendRequests, respondToFriendRequest } from '../api/api';
+import {
+  createSession,
+  getPendingInvites,
+  respondToInvite,
+  getPendingFriendRequests,
+  respondToFriendRequest,
+} from '../api/api';
 import { socket } from '../services/socket';
 import { BACKEND_URL } from '../config/api';
 import type { FriendRequest, SessionInvite } from '../types/invite';
@@ -18,8 +31,14 @@ export default function HomeScreen({ navigation }: Props) {
   const [respondError, setRespondError] = useState<string | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [respondingToRequest, setRespondingToRequest] = useState<number | null>(null);
+
+  // New: logged-in user state
+  const [username, setUsername] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const userIdRef = useRef<string | null>(null);
 
+  // ── Fetch current user + join personal socket room ──────────────────────
   useEffect(() => {
     const handleUserConnect = () => {
       if (userIdRef.current) {
@@ -28,7 +47,6 @@ export default function HomeScreen({ navigation }: Props) {
     };
     socket.on('connect', handleUserConnect);
 
-    // Fetch current user and join personal socket room
     fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' })
       .then((res) => {
         if (!res.ok) return null;
@@ -37,6 +55,7 @@ export default function HomeScreen({ navigation }: Props) {
       .then((data) => {
         if (data) {
           userIdRef.current = data.userID;
+          setUsername(data.username);
           socket.connect();
           if (socket.connected) {
             socket.emit('user:joinRoom', data.userID);
@@ -60,7 +79,7 @@ export default function HomeScreen({ navigation }: Props) {
     };
   }, []);
 
-  // Load on mount and whenever the screen comes back into focus
+  // ── Load invites + friend requests on mount and focus ───────────────────
   useEffect(() => {
     loadInvites();
     loadFriendRequests();
@@ -79,7 +98,7 @@ export default function HomeScreen({ navigation }: Props) {
       const pending = await getPendingInvites();
       setInvites(pending);
     } catch {
-      // silently fail — invites are non-critical
+      // non-critical
     }
   }
 
@@ -88,11 +107,37 @@ export default function HomeScreen({ navigation }: Props) {
       const requests = await getPendingFriendRequests();
       setFriendRequests(requests);
     } catch {
-      // silently fail
+      // non-critical
     }
   }
 
-  async function handleRespondToRequest(request: FriendRequest, action: 'accept' | 'decline') {
+  // ── Logout ───────────────────────────────────────────────────────────────
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch(`${BACKEND_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // even if the request fails, clear local state and navigate away
+    } finally {
+      socket.disconnect();
+      userIdRef.current = null;
+      setUsername(null);
+      setLoggingOut(false);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    }
+  }
+
+  // ── Friend request responses ─────────────────────────────────────────────
+  async function handleRespondToRequest(
+    request: FriendRequest,
+    action: 'accept' | 'decline'
+  ) {
     setRespondingToRequest(request.id);
     try {
       await respondToFriendRequest(request.id, action);
@@ -104,6 +149,7 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }
 
+  // ── Create session ────────────────────────────────────────────────────────
   async function handleCreateSession() {
     setCreateError(null);
     setCreating(true);
@@ -117,6 +163,7 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }
 
+  // ── Invite responses ──────────────────────────────────────────────────────
   async function handleRespond(invite: SessionInvite, action: 'accept' | 'decline') {
     setRespondingTo(invite.id);
     setRespondError(null);
@@ -124,7 +171,8 @@ export default function HomeScreen({ navigation }: Props) {
       await respondToInvite(invite.id, action);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
       if (action === 'accept') {
-        navigation.navigate('JoinSession', { preFilledCode: invite.sessionCode });
+        // Navigate directly to lobby — no need to re-enter the code
+        navigation.navigate('Lobby', { sessionCode: invite.sessionCode });
       }
     } catch (err: unknown) {
       const statusCode = (err as { statusCode?: number }).statusCode;
@@ -139,10 +187,34 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   const headerContent = (
     <View style={styles.header}>
-      <Text style={styles.title}>PokerCircle</Text>
+      {/* Username + logout row */}
+      <View style={styles.profileRow}>
+        <View>
+          <Text style={styles.title}>PokerCircle</Text>
+          {username !== null && (
+            <Text style={styles.usernameText}>👤 {username}</Text>
+          )}
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.logoutButton,
+            (pressed || loggingOut) && styles.logoutButtonPressed,
+          ]}
+          onPress={handleLogout}
+          disabled={loggingOut}
+        >
+          {loggingOut ? (
+            <ActivityIndicator color={colors.placeholder} size="small" />
+          ) : (
+            <Text style={styles.logoutText}>Log Out</Text>
+          )}
+        </Pressable>
+      </View>
 
+      {/* Friend requests */}
       {friendRequests.length > 0 && (
         <View style={styles.inviteSection}>
           <Text style={styles.inviteSectionTitle}>Friend Requests</Text>
@@ -177,6 +249,7 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       )}
 
+      {/* Session invite section header */}
       {invites.length > 0 && (
         <View style={styles.inviteSection}>
           <Text style={styles.inviteSectionTitle}>Session Invites</Text>
@@ -282,18 +355,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 32,
   },
+
+  // ── Profile / header row ──────────────────────────────────────────────────
   header: {
     alignItems: 'center',
     paddingTop: 60,
     paddingBottom: 8,
+    width: '100%',
+  },
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 32,
   },
   title: {
     fontSize: 42,
     letterSpacing: 3,
-    marginBottom: 40,
     color: colors.primaryDark,
     textTransform: 'uppercase',
   },
+  usernameText: {
+    color: colors.placeholder,
+    fontSize: 13,
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  logoutButton: {
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.disabled,
+  },
+  logoutButtonPressed: {
+    opacity: 0.6,
+  },
+  logoutText: {
+    color: colors.placeholder,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ── Sections ──────────────────────────────────────────────────────────────
   inviteSection: {
     width: '100%',
     maxWidth: 320,
@@ -307,6 +414,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 8,
   },
+
+  // ── Invite / friend request rows ──────────────────────────────────────────
   inviteRow: {
     alignSelf: 'center',
     width: '100%',
@@ -366,6 +475,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 8,
   },
+
+  // ── Main action buttons ───────────────────────────────────────────────────
   buttonContainer: {
     width: '100%',
     maxWidth: 320,
