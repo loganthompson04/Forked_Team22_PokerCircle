@@ -13,6 +13,7 @@ import GameScreen from './src/screens/GameScreen';
 import InviteFriendsScreen from './src/screens/InviteFriendsScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import FriendsListScreen from './src/screens/FriendsListScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 export type RootStackParamList = {
   Welcome: undefined;
@@ -27,6 +28,7 @@ export type RootStackParamList = {
   /** TM22-88 — session summary: net results + who-pays-who settlement */
   Results: { sessionCode: string };
   FriendsList: undefined;
+  Profile: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -55,6 +57,7 @@ export default function App() {
           options={{ headerShown: false }}          // full-screen payoff moment
         />
         <Stack.Screen name="FriendsList" component={FriendsListScreen} options={{ title: 'Friends' }} />
+        <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

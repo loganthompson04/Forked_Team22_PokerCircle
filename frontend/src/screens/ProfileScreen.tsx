@@ -8,14 +8,14 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { colors } from '../theme/colors';
 import { getUserStats, getUserSessions } from '../api/api';
 import { BACKEND_URL } from '../config/api';
 import type { UserStats, UserSession } from '../types/profile';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+type Props = StackScreenProps<RootStackParamList, 'Profile'>;
 
 function formatNet(value: number): string {
   const abs = Math.abs(value).toFixed(2);
