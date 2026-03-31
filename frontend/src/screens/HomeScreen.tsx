@@ -301,6 +301,16 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text style={styles.secondaryButtonText}>Find Friends</Text>
       </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => navigation.navigate('FriendsList')}
+      >
+        <Text style={styles.secondaryButtonText}>My Friends</Text>
+      </Pressable>
     </View>
   );
 
