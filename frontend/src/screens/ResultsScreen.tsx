@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
+  Alert,
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,6 +14,8 @@ import type { RootStackParamList } from '../../App';
 import { getSessionResults } from '../api/api';
 import type { PlayerResult, SettlementTransaction } from '../api/api';
 import { colors } from '../theme/colors';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorMessage from '../components/ErrorMessage';
 
 type Props = StackScreenProps<RootStackParamList, 'Results'>;
 
@@ -25,51 +27,100 @@ export default function ResultsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadResults = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await getSessionResults(sessionCode);
+      const sorted = [...data.playerResults].sort(
+        (a, b) => b.netResult - a.netResult
+      );
+
+      setPlayerResults(sorted);
+      setTransactions(data.transactions);
+    } catch (err: unknown) {
+      console.error('ResultsScreen load error:', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not connect — check your connection'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    getSessionResults(sessionCode)
-      .then((data) => {
-        // Sort: biggest winners first, then losers
-        const sorted = [...data.playerResults].sort((a, b) => b.netResult - a.netResult);
-        setPlayerResults(sorted);
-        setTransactions(data.transactions);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load results');
-      })
-      .finally(() => setLoading(false));
+    void loadResults();
   }, [sessionCode]);
 
-  // Prevent hardware back — results are a terminal screen
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      // Only intercept the back action; let navigate('Home') through
       if (e.data.action.type === 'GO_BACK') {
         e.preventDefault();
       }
     });
+
     return unsubscribe;
   }, [navigation]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={styles.loadingText}>Calculating results…</Text>
-        </View>
-      </SafeAreaView>
+  const openUrlWithFallback = async (primaryUrl: string, fallbackUrl: string) => {
+    try {
+      const supported = await Linking.canOpenURL(primaryUrl);
+
+      if (supported) {
+        await Linking.openURL(primaryUrl);
+      } else {
+        await Linking.openURL(fallbackUrl);
+      }
+    } catch (err) {
+      console.error('Payment link error:', err);
+      Alert.alert('Error', 'Could not open payment link.');
+    }
+  };
+
+  const handleVenmoPayment = async (to: string, amount: number) => {
+    const note = encodeURIComponent(`PokerCircle payment for session ${sessionCode}`);
+    const venmoAppUrl = `venmo://paycharge?txn=pay&amount=${amount.toFixed(2)}&note=${note}`;
+    const venmoWebUrl = 'https://venmo.com/';
+
+    Alert.alert(
+      'Open Venmo',
+      `Recipient handle for ${to} is not saved yet, so Venmo will open and you can finish the payment manually.`
     );
+
+    await openUrlWithFallback(venmoAppUrl, venmoWebUrl);
+  };
+
+  const handlePayPalPayment = async (to: string) => {
+    Alert.alert(
+      'Open PayPal',
+      `PayPal.Me handle for ${to} is not saved yet, so PayPal will open and you can finish the payment manually.`
+    );
+
+    await openUrlWithFallback('paypal://', 'https://www.paypal.com/');
+  };
+
+  const handleCashAppPayment = async (to: string) => {
+    Alert.alert(
+      'Open Cash App',
+      `Cash App handle for ${to} is not saved yet, so Cash App will open and you can finish the payment manually.`
+    );
+
+    await openUrlWithFallback('cashapp://', 'https://cash.app/');
+  };
+
+  if (loading) {
+    return <LoadingSpinner message="Calculating results..." />;
   }
 
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable
-            style={styles.doneButton}
-            onPress={() => navigation.navigate('Home')}
-          >
+          <ErrorMessage message={error} onRetry={loadResults} />
+          <Pressable style={styles.doneButton} onPress={() => navigation.navigate('Home')}>
             <Text style={styles.doneButtonText}>Go Home</Text>
           </Pressable>
         </View>
@@ -79,35 +130,33 @@ export default function ResultsScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Results</Text>
           <Text style={styles.code}>{sessionCode}</Text>
         </View>
 
-        {/* Net results */}
         <Text style={styles.sectionLabel}>Net Results</Text>
+
         {playerResults.map((item) => {
           const isWinner = item.netResult > 0;
           const isLoser = item.netResult < 0;
           const sign = isWinner ? '+' : '';
+
           return (
             <View key={item.displayName} style={styles.resultRow}>
               <View style={styles.resultLeft}>
                 <Text style={styles.medal}>
-                  {isWinner ? '🟢' : isLoser ? '🔴' : '⚪️'}
+                  {isWinner ? 'WIN' : isLoser ? 'LOSS' : 'EVEN'}
                 </Text>
                 <Text style={styles.playerName}>{item.displayName}</Text>
               </View>
+
               <Text
                 style={[
                   styles.netAmount,
-                  isWinner && styles.positive,
-                  isLoser && styles.negative,
+                  isWinner ? styles.positive : null,
+                  isLoser ? styles.negative : null,
                 ]}
               >
                 {sign}${Math.abs(item.netResult).toFixed(2)}
@@ -116,30 +165,54 @@ export default function ResultsScreen({ route, navigation }: Props) {
           );
         })}
 
-        {/* Settlement */}
-        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>Who Pays Who</Text>
+        <Text style={styles.sectionLabelWithSpacing}>Who Pays Who</Text>
+
         {transactions.length === 0 ? (
           <View style={styles.evenBox}>
-            <Text style={styles.evenText}>🎉 Everyone is even — no payments needed!</Text>
+            <Text style={styles.evenText}>Everyone is even — no payments needed.</Text>
           </View>
         ) : (
           transactions.map((t, idx) => (
-            <View key={idx} style={styles.transactionRow}>
-              <View style={styles.transactionLeft}>
-                <Text style={styles.fromName}>{t.from}</Text>
-                <Text style={styles.arrow}> → </Text>
-                <Text style={styles.toName}>{t.to}</Text>
+            <View key={idx} style={styles.transactionCard}>
+              <View style={styles.transactionRow}>
+                <View style={styles.transactionLeft}>
+                  <Text style={styles.fromName}>{t.from}</Text>
+                  <Text style={styles.arrow}> to </Text>
+                  <Text style={styles.toName}>{t.to}</Text>
+                </View>
+                <Text style={styles.transactionAmount}>${t.amount.toFixed(2)}</Text>
               </View>
-              <Text style={styles.transactionAmount}>${t.amount.toFixed(2)}</Text>
+
+              <View style={styles.paymentButtonsRow}>
+                <Pressable
+                  style={[styles.payButton, styles.venmoButton]}
+                  onPress={() => handleVenmoPayment(t.to, t.amount)}
+                >
+                  <Text style={styles.payButtonText}>Venmo</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.payButton, styles.paypalButton]}
+                  onPress={() => handlePayPalPayment(t.to)}
+                >
+                  <Text style={styles.payButtonText}>PayPal</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.payButton, styles.cashAppButton]}
+                  onPress={() => handleCashAppPayment(t.to)}
+                >
+                  <Text style={styles.payButtonText}>Cash App</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         )}
 
-        {/* Done */}
         <Pressable
           style={({ pressed }) => [
             styles.doneButton,
-            pressed && styles.doneButtonPressed,
+            pressed ? styles.doneButtonPressed : null,
           ]}
           onPress={() => navigation.navigate('Home')}
         >
@@ -165,10 +238,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    gap: 16,
   },
-
-  // Header
   headerRow: {
     marginBottom: 24,
   },
@@ -184,8 +254,6 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     marginTop: 2,
   },
-
-  // Section labels
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -194,8 +262,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 10,
   },
-
-  // Net result rows
+  sectionLabelWithSpacing: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.placeholder,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginTop: 28,
+    marginBottom: 10,
+  },
   resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -211,10 +286,12 @@ const styles = StyleSheet.create({
   resultLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
   medal: {
-    fontSize: 16,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.placeholder,
+    marginRight: 10,
   },
   playerName: {
     color: colors.text,
@@ -232,8 +309,6 @@ const styles = StyleSheet.create({
   negative: {
     color: colors.primary,
   },
-
-  // Settlement rows
   evenBox: {
     backgroundColor: colors.inputBackground,
     borderRadius: 12,
@@ -247,17 +322,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
   },
-  transactionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  transactionCard: {
     backgroundColor: colors.inputBackground,
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.inputBorder,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   transactionLeft: {
     flexDirection: 'row',
@@ -286,23 +363,42 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginLeft: 12,
   },
-
-  // Done button
+  paymentButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  payButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  venmoButton: {
+    backgroundColor: '#3D95CE',
+  },
+  paypalButton: {
+    backgroundColor: '#003087',
+  },
+  cashAppButton: {
+    backgroundColor: '#00C244',
+  },
+  payButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   doneButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 18,
     alignItems: 'center',
     marginTop: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    paddingHorizontal: 24,
   },
   doneButtonPressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.98 }],
   },
   doneButtonText: {
     color: colors.textOnPrimary,
@@ -310,17 +406,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-
-  // Loading / error
-  loadingText: {
-    color: colors.placeholder,
-    fontSize: 15,
-    marginTop: 12,
-  },
-  errorText: {
-    color: colors.primary,
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
+  
 });

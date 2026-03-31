@@ -19,12 +19,43 @@ type Props = StackScreenProps<RootStackParamList, 'FriendsList'>;
 export default function FriendsListScreen({ navigation: _navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getFriends()
-      .then(setFriends)
-      .catch(() => setFriends([]))
-      .finally(() => setLoading(false));
+    let mounted = true;
+
+    const loadFriends = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await getFriends();
+
+        if (mounted) {
+          setFriends(data);
+        }
+      } catch (err: unknown) {
+        console.error('FriendsListScreen load error:', err);
+        if (mounted) {
+          setFriends([]);
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Could not connect — check your connection'
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadFriends();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading) {
@@ -32,7 +63,19 @@ export default function FriendsListScreen({ navigation: _navigation }: Props) {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={styles.loadingText}>Loading friends...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       </SafeAreaView>
     );
@@ -43,6 +86,7 @@ export default function FriendsListScreen({ navigation: _navigation }: Props) {
       <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
       <View style={styles.content}>
         <Text style={styles.title}>Friends</Text>
+
         {friends.length === 0 ? (
           <View style={styles.centered}>
             <Text style={styles.emptyText}>
@@ -52,8 +96,8 @@ export default function FriendsListScreen({ navigation: _navigation }: Props) {
         ) : (
           <FlatList
             data={friends}
-            keyExtractor={(item) => item.userId}
-            contentContainerStyle={{ paddingBottom: 20 }}
+            keyExtractor={(item) => String(item.userId)}
+            contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
               <View style={styles.friendRow}>
                 <Text style={styles.username}>{item.username}</Text>
@@ -75,6 +119,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
   content: {
     flex: 1,
@@ -87,6 +132,9 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 16,
     letterSpacing: 1,
+  },
+  listContent: {
+    paddingBottom: 20,
   },
   friendRow: {
     backgroundColor: colors.inputBackground,
@@ -102,6 +150,16 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: colors.placeholder,
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  loadingText: {
+    color: colors.placeholder,
+    fontSize: 15,
+    marginTop: 12,
+  },
+  errorText: {
+    color: colors.primary,
     fontSize: 15,
     textAlign: 'center',
   },
