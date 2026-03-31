@@ -6,11 +6,11 @@ import { socket } from '../services/socket';
 import { getSession } from '../api/api';
 import { colors } from '../theme/colors';
 import { BACKEND_URL } from '../config/api';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorMessage from '../components/ErrorMessage';
 
 type Props = StackScreenProps<RootStackParamList, 'Lobby'>;
 
-// Matches SocketPlayer from the backend socket store —
-// only fields the lobby actually needs.
 type LobbyPlayer = {
   playerId: string;
   name: string;
@@ -38,6 +38,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
   const [isHost, setIsHost] = useState(false);
   const previousPlayersRef = useRef<LobbyPlayer[]>([]);
   const resolvedPlayerNameRef = useRef('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -59,6 +60,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
       previousPlayersRef.current = currentPlayers;
       setPlayers(currentPlayers);
       setIsJoining(false);
+      setLoading(false);
     };
 
     const handleGameStart = (payload: GameStartPayload) => {
@@ -70,12 +72,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
       if (!active) return;
       setError(payload.message);
       setIsJoining(false);
+      setLoading(false);
     };
 
     const handleConnectError = (_err: unknown) => {
       if (!active) return;
-      setError('Could not connect to lobby server.');
+      setError('Could not connect — check your connection');
       setIsJoining(false);
+      setLoading(false);
     };
 
     const handleReconnect = () => {
@@ -97,12 +101,18 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     async function init() {
       try {
+        setLoading(true);
+        setError(null);
+
         const authRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           credentials: 'include',
         });
 
         if (!authRes.ok) {
-          if (active) setError('Not authenticated. Please log in again.');
+          if (active) {
+            setError('Not authenticated. Please log in again.');
+            setLoading(false);
+          }
           return;
         }
 
@@ -114,14 +124,18 @@ export default function LobbyScreen({ route, navigation }: Props) {
         resolvedPlayerNameRef.current = playerName;
 
         try {
-          await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/join`, {
+          const joinRes = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/join`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ displayName: playerName }),
           });
-        } catch {
-          // non-critical — socket join still proceeds
+
+          if (!joinRes.ok) {
+            console.error('Lobby join request failed');
+          }
+        } catch (err) {
+          console.error('Lobby join request error:', err);
         }
 
         try {
@@ -145,10 +159,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
             playerName: resolvedPlayerNameRef.current,
           });
         }
-      } catch {
+      } catch (err) {
+        console.error('Lobby init error:', err);
         if (active) {
-          setError('Could not connect to server.');
+          setError('Could not connect — check your connection');
           setIsJoining(false);
+          setLoading(false);
         }
       }
     }
@@ -179,13 +195,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
     return () => clearTimeout(timer);
   }, [startError]);
 
-  // ── teammate change: clears error, renames next → nextReadyState ──────────
   async function handleReadyToggle() {
     const myPlayerName = resolvedPlayerNameRef.current;
     if (!myPlayerName) return;
+
     setError(null);
     const myIsReady = players.find((p) => p.name === myPlayerName)?.isReady ?? false;
     const nextReadyState = !myIsReady;
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/ready`, {
         method: 'POST',
@@ -196,12 +213,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
           isReady: nextReadyState,
         }),
       });
+
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         setError(body.error ?? 'Failed to update ready status.');
       }
-    } catch {
-      setError('Could not reach server.');
+    } catch (err) {
+      console.error('Ready toggle error:', err);
+      setError('Could not connect — check your connection');
     }
   }
 
@@ -219,19 +238,37 @@ export default function LobbyScreen({ route, navigation }: Props) {
         const data = (await res.json()) as { error?: string };
         setStartError(data.error ?? 'Failed to start game.');
       }
-      // On success the game:start socket event drives navigation
-    } catch {
-      setStartError('Could not reach the server. Please try again.');
+    } catch (err) {
+      console.error('Start game error:', err);
+      setStartError('Could not connect — check your connection');
     } finally {
       setIsStarting(false);
     }
   };
 
+  const handleRetry = () => {
+    previousPlayersRef.current = [];
+    setPlayers([]);
+    setError(null);
+    setStartError(null);
+    setJoinMessage(null);
+    setStatusMessage(null);
+    setIsJoining(true);
+    setLoading(true);
+
+    socket.disconnect();
+    socket.connect();
+  };
+
+  if (loading) {
+    return <LoadingSpinner message="Joining lobby..." />;
+  }
+
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContent}>
-          <Text style={styles.errorText}>{error}</Text>
+          <ErrorMessage message={error} onRetry={handleRetry} />
           <Pressable style={styles.button} onPress={() => navigation.goBack()}>
             <Text style={styles.buttonText}>Go Back</Text>
           </Pressable>
@@ -269,11 +306,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      {startError && (
-        <View style={styles.startErrorBox}>
-          <Text style={styles.startErrorText}>{startError}</Text>
-        </View>
-      )}
+      {startError && <ErrorMessage message={startError} onRetry={handleStartGame} />}
 
       <FlatList
         data={players}
@@ -287,7 +320,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
                 <Text style={styles.playerName}>{item.name}</Text>
                 <Text style={styles.playerLabel}>Player {index + 1}</Text>
               </View>
-              {/* ── teammate change: host never sees Ready button ── */}
+
               {isMe && !isHost ? (
                 <Pressable
                   onPress={handleReadyToggle}
@@ -299,7 +332,6 @@ export default function LobbyScreen({ route, navigation }: Props) {
                       item.isReady && styles.readyButtonTextActive,
                     ]}
                   >
-                    {/* ── teammate change: label swap ── */}
                     {item.isReady ? 'Not Ready' : 'Ready'}
                   </Text>
                 </Pressable>
@@ -396,17 +428,6 @@ const styles = StyleSheet.create({
     borderColor: colors.inputBorder,
   },
   statusText: { color: colors.text, fontSize: 14, textAlign: 'center' },
-  startErrorBox: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: '#2a1a1a',
-    borderWidth: 1,
-    borderColor: '#cc4444',
-  },
-  startErrorText: { color: '#ff6b6b', fontSize: 14, textAlign: 'center', fontWeight: '600' },
   listContent: { paddingHorizontal: 16, flexGrow: 1 },
   playerRow: {
     paddingVertical: 14,
@@ -444,15 +465,15 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
   },
-  errorText: { color: colors.primary, fontSize: 16, textAlign: 'center', marginBottom: 24 },
   button: {
     backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
+    marginTop: 8,
   },
   buttonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '600' },
   startButtonContainer: { padding: 16, paddingBottom: 24 },
