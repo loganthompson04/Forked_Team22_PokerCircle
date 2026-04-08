@@ -1,4 +1,4 @@
-import type { Session } from '../types/session';
+import type { Session, Player } from '../types/session';
 import type { Friend, FriendRequest, SessionInvite } from '../types/invite';
 import type { UserStats, UserSession } from '../types/profile';
 import { BACKEND_URL } from '../config/api';
@@ -105,6 +105,17 @@ export async function completeSession(sessionCode: string): Promise<Session> {
     throw new Error(body.error ?? 'Failed to complete session');
   }
   return response.json() as Promise<Session>;
+}
+
+export async function getSessionPlayers(sessionCode: string): Promise<Player[]> {
+  const response = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/players`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to fetch players');
+  }
+  return response.json() as Promise<Player[]>;
 }
 
 /**

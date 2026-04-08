@@ -199,7 +199,10 @@ export default function ProfileScreen({ navigation }: Props) {
             keyExtractor={(item) => item.sessionCode}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
-              <View style={styles.sessionRow}>
+              <TouchableOpacity
+                style={styles.sessionRow}
+                onPress={() => navigation.navigate('SessionDetail', { sessionCode: item.sessionCode })}
+              >
                 <View style={styles.sessionMain}>
                   <Text style={styles.sessionCode}>{item.sessionCode}</Text>
                   <Text style={styles.sessionDate}>{formatDate(item.date)}</Text>
@@ -216,7 +219,7 @@ export default function ProfileScreen({ navigation }: Props) {
                   </Text>
                   <Text style={styles.sessionPlayers}>{item.playerCount} players</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
           />
         )}

@@ -5,7 +5,7 @@ import pool from '../db/pool';
 import { generateSessionCode } from '../utils/sessionCode';
 import type { Server } from 'socket.io';
 import { setPlayerReadyByName, getSession } from '../store/sessionStore';
-import type { LobbyUpdatePayload } from '../types/socketEvents';
+import type { LobbyUpdatePayload, FinanceUpdatePayload } from '../types/socketEvents';
 import type { SessionInvite } from '../types/invite';
 import {
   getSessionWithPlayers,
@@ -123,6 +123,23 @@ router.get(
       status: first['status'],
       players,
     });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/sessions/:sessionCode/players
+// ---------------------------------------------------------------------------
+router.get(
+  '/:sessionCode/players',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { sessionCode } = req.params as { sessionCode: string };
+
+    const session = await getSessionWithPlayers(sessionCode);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    return res.status(200).json(session.players);
   })
 );
 
@@ -323,6 +340,16 @@ router.patch(
 
     if (!success) {
       return res.status(404).json({ error: 'Player or session not found' });
+    }
+
+    const session = await getSessionWithPlayers(sessionCode);
+    if (session) {
+      const io: Server = req.app.get('io');
+      const payload: FinanceUpdatePayload = {
+        sessionCode,
+        players: session.players,
+      };
+      io.to(sessionCode).emit('finance:update', payload);
     }
 
     return res.status(200).json({

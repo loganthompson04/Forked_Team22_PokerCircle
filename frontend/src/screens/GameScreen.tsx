@@ -2,73 +2,133 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { colors } from '../theme/colors';
-import { completeSession } from '../api/api';
+import { completeSession, getSession, updatePlayerFinances } from '../api/api';
 import { socket } from '../services/socket';
 import { BACKEND_URL } from '../config/api';
+import type { Player } from '../types/session';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 type Props = StackScreenProps<RootStackParamList, 'Game'>;
 
 export default function GameScreen({ route, navigation }: Props) {
   const { sessionCode } = route.params;
 
+  const [players, setPlayers] = useState<Player[]>([]);
   const [isHost, setIsHost] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [myPlayerName, setMyPlayerName] = useState<string | null>(null);
+
+  // Financial inputs for the current player
+  const [buyIn, setBuyIn] = useState('');
+  const [rebuy, setRebuy] = useState('');
+  const [cashOut, setCashOut] = useState('');
+  const [isUpdatingFinances, setIsUpdatingFinances] = useState(false);
 
   // -------------------------------------------------------------------------
-  // Determine if the current user is the host
+  // Initialization: Auth, Session, and Socket
   // -------------------------------------------------------------------------
   useEffect(() => {
     let active = true;
 
-    async function checkHost() {
+    async function init() {
       try {
         const [authRes, sessionRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' }),
-          fetch(`${BACKEND_URL}/api/sessions/${sessionCode}`, { credentials: 'include' }),
+          getSession(sessionCode),
         ]);
-        if (!authRes.ok || !sessionRes.ok) return;
 
-        const auth = await authRes.json() as { userID: string };
-        const session = await sessionRes.json() as { hostUserId: string };
-
-        if (active) {
-          setIsHost(auth.userID === session.hostUserId);
+        if (!authRes.ok) {
+          if (active) navigation.navigate('Login');
+          return;
         }
-      } catch {
-        // non-critical — UI just won't show the end button
+
+        const auth = await authRes.json() as { userID: string; username: string };
+        
+        if (active) {
+          setMyPlayerName(auth.username);
+          setIsHost(auth.userID === sessionRes.hostUserId);
+          setPlayers(sessionRes.players);
+          
+          // Pre-fill my own finances if they exist
+          const me = sessionRes.players.find(p => p.displayName === auth.username);
+          if (me) {
+            setBuyIn(me.buyIn.toString());
+            setRebuy(me.rebuyTotal.toString());
+            setCashOut(me.cashOut > 0 ? me.cashOut.toString() : '');
+          }
+          
+          setLoading(false);
+        }
+
+        // Socket setup
+        socket.connect();
+        socket.emit('session:joinRoom', {
+          sessionCode,
+          playerName: auth.username,
+        });
+      } catch (err) {
+        console.error('GameScreen init error:', err);
+        if (active) setLoading(false);
       }
     }
 
-    void checkHost();
-    return () => { active = false; };
-  }, [sessionCode]);
+    void init();
 
-  // -------------------------------------------------------------------------
-  // Socket: all clients navigate to Results when host fires game:complete
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const handleComplete = (payload: { sessionCode: string }) => {
-      navigation.replace('Results', { sessionCode: payload.sessionCode });
+    const handleFinanceUpdate = (payload: { sessionCode: string; players: Player[] }) => {
+      if (active && payload.sessionCode === sessionCode) {
+        setPlayers(payload.players);
+      }
     };
 
+    const handleComplete = (payload: { sessionCode: string }) => {
+      if (active) navigation.replace('Results', { sessionCode: payload.sessionCode });
+    };
+
+    socket.on('finance:update', handleFinanceUpdate);
     socket.on('game:complete', handleComplete);
+
     return () => {
+      active = false;
+      socket.off('finance:update', handleFinanceUpdate);
       socket.off('game:complete', handleComplete);
     };
-  }, [navigation]);
+  }, [sessionCode, navigation]);
 
   // -------------------------------------------------------------------------
-  // Host action: end session
+  // Actions
   // -------------------------------------------------------------------------
+  async function handleUpdateFinances() {
+    if (!myPlayerName) return;
+    
+    setIsUpdatingFinances(true);
+    try {
+      await updatePlayerFinances(sessionCode, myPlayerName, {
+        buyIn: buyIn ? parseFloat(buyIn) : 0,
+        rebuyTotal: rebuy ? parseFloat(rebuy) : 0,
+        cashOut: cashOut ? parseFloat(cashOut) : 0,
+      });
+      // The local state will be updated via the socket event 'finance:update'
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update finances');
+    } finally {
+      setIsUpdatingFinances(false);
+    }
+  }
+
   async function handleEndSession() {
     Alert.alert(
       'End Session',
@@ -82,7 +142,6 @@ export default function GameScreen({ route, navigation }: Props) {
             setIsEnding(true);
             try {
               await completeSession(sessionCode);
-              // Navigation is driven by the game:complete socket event received above
             } catch (err: unknown) {
               Alert.alert(
                 'Error',
@@ -96,147 +155,193 @@ export default function GameScreen({ route, navigation }: Props) {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
+  if (loading) return <LoadingSpinner message="Loading game..." />;
+
+  const renderPlayer = ({ item }: { item: Player }) => {
+    const isMe = item.displayName === myPlayerName;
+    const hasCashedOut = item.cashOut > 0;
+
+    return (
+      <View style={[styles.playerCard, isMe && styles.myPlayerCard]}>
+        <View style={styles.playerHeader}>
+          <Text style={styles.playerName}>{item.displayName} {isMe && '(You)'}</Text>
+          {hasCashedOut ? (
+            <View style={styles.confirmedBadge}>
+              <Text style={styles.confirmedText}>CASHED OUT</Text>
+            </View>
+          ) : (
+            <Text style={styles.activeText}>In Play</Text>
+          )}
+        </View>
+        <View style={styles.playerStats}>
+          <Text style={styles.statText}>Total In: ${item.buyIn + item.rebuyTotal}</Text>
+          {hasCashedOut && <Text style={styles.statText}>Out: ${item.cashOut}</Text>}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Session code badge */}
-        <View style={styles.codeBadge}>
-          <Text style={styles.codeLabel}>SESSION</Text>
-          <Text style={styles.code}>{sessionCode}</Text>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.header}>
+          <View style={styles.codeBadge}>
+            <Text style={styles.codeLabel}>SESSION</Text>
+            <Text style={styles.code}>{sessionCode}</Text>
+          </View>
         </View>
 
-        <Text style={styles.title}>Game in Progress</Text>
-        <Text style={styles.subtitle}>
-          Track buy-ins and cash-outs, then end the session to see who owes who.
-        </Text>
+        <View style={styles.content}>
+          <Text style={styles.sectionTitle}>Players Status</Text>
+          <FlatList
+            data={players}
+            renderItem={renderPlayer}
+            keyExtractor={(p) => p.playerId || p.displayName || Math.random().toString()}
+            contentContainerStyle={styles.playerList}
+          />
 
-        {/* Placeholder for future active game UI */}
-        <View style={styles.placeholderBox}>
-          <Text style={styles.placeholderText}>🃏  Poker game UI coming soon…</Text>
+          <View style={styles.myActions}>
+            <Text style={styles.sectionTitle}>Your Finances</Text>
+            <View style={styles.inputRow}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Buy-in</Text>
+                <TextInput
+                  style={styles.input}
+                  value={buyIn}
+                  onChangeText={setBuyIn}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Rebuys</Text>
+                <TextInput
+                  style={styles.input}
+                  value={rebuy}
+                  onChangeText={setRebuy}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Cash-out</Text>
+                <TextInput
+                  style={styles.input}
+                  value={cashOut}
+                  onChangeText={setCashOut}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+            </View>
+            <Pressable
+              style={[styles.updateButton, isUpdatingFinances && styles.buttonDisabled]}
+              onPress={handleUpdateFinances}
+              disabled={isUpdatingFinances}
+            >
+              {isUpdatingFinances ? (
+                <ActivityIndicator color={colors.textOnPrimary} />
+              ) : (
+                <Text style={styles.updateButtonText}>Confirm My Totals</Text>
+              )}
+            </Pressable>
+          </View>
+
+          {isHost && (
+            <Pressable
+              style={[styles.endButton, isEnding && styles.buttonDisabled]}
+              onPress={handleEndSession}
+              disabled={isEnding}
+            >
+              {isEnding ? (
+                <ActivityIndicator color={colors.textOnPrimary} />
+              ) : (
+                <Text style={styles.endButtonText}>End Session &amp; See Results</Text>
+              )}
+            </Pressable>
+          )}
         </View>
-
-        {/* Host-only: End Session */}
-        {isHost && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.endButton,
-              (pressed || isEnding) && styles.endButtonPressed,
-            ]}
-            onPress={handleEndSession}
-            disabled={isEnding}
-          >
-            {isEnding ? (
-              <ActivityIndicator color={colors.textOnPrimary} />
-            ) : (
-              <Text style={styles.endButtonText}>End Session &amp; See Results</Text>
-            )}
-          </Pressable>
-        )}
-
-        {!isHost && (
-          <Text style={styles.waitingText}>
-            Waiting for the host to end the session…
-          </Text>
-        )}
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { alignItems: 'center', paddingVertical: 10 },
+  content: { flex: 1, paddingHorizontal: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12, marginTop: 10 },
+  playerList: { paddingBottom: 20 },
+  playerCard: {
+    backgroundColor: colors.inputBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+  },
+  myPlayerCard: { borderColor: colors.primary, borderWidth: 1.5 },
+  playerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  playerName: { fontSize: 16, fontWeight: '600', color: colors.text },
+  activeText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
+  confirmedBadge: { backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  confirmedText: { fontSize: 10, color: colors.textOnPrimary, fontWeight: '800' },
+  playerStats: { flexDirection: 'row', gap: 15 },
+  statText: { fontSize: 14, color: colors.placeholder },
+  
+  myActions: {
+    backgroundColor: colors.inputBackground,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    marginBottom: 20,
+  },
+  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  inputGroup: { flex: 1 },
+  inputLabel: { fontSize: 12, color: colors.placeholder, marginBottom: 5 },
+  input: {
     backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: 8,
+    padding: 10,
+    color: colors.text,
+    fontSize: 16,
   },
-  content: {
-    flex: 1,
+  updateButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 20,
   },
+  updateButtonText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 16 },
+  
+  endButton: {
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  endButtonText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 16 },
+  buttonDisabled: { opacity: 0.6 },
 
   codeBadge: {
     alignItems: 'center',
     backgroundColor: colors.inputBackground,
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: colors.inputBorder,
   },
-  codeLabel: {
-    fontSize: 10,
-    color: colors.placeholder,
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  code: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 6,
-  },
-
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.placeholder,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
-  placeholderBox: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 16,
-    paddingVertical: 40,
-    paddingHorizontal: 32,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    width: '100%',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    color: colors.placeholder,
-    fontSize: 16,
-  },
-
-  endButton: {
-    width: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 18,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  endButtonPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  endButtonText: {
-    color: colors.textOnPrimary,
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
-  waitingText: {
-    color: colors.placeholder,
-    fontSize: 14,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+  codeLabel: { fontSize: 10, color: colors.placeholder, letterSpacing: 2, marginBottom: 2 },
+  code: { fontSize: 20, fontWeight: '800', color: colors.primary, letterSpacing: 4 },
 });
