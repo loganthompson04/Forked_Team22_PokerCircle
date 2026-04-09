@@ -177,34 +177,31 @@ export default function GameScreen({ route, navigation }: Props) {
   }
 
   async function handleEndSession() {
-    Alert.alert(
-      'End Session',
-      'This will finalise all results and show the settlement screen to everyone. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Session',
-          style: 'destructive',
-          onPress: async () => {
-            setIsEnding(true);
-            try {
-              await completeSession(sessionCode);
-              // Navigation happens via the 'game:complete' socket event.
-              // Add a fallback in case the socket event is missed:
-              setTimeout(() => {
-                navigation.replace('Results', { sessionCode });
-              }, 3000);
-            } catch (err: unknown) {
-              Alert.alert(
-                'Error',
-                err instanceof Error ? err.message : 'Could not end the session'
-              );
-              setIsEnding(false);
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('This will finalise all results and show the settlement screen to everyone. Are you sure?')
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'End Session',
+            'This will finalise all results and show the settlement screen to everyone. Are you sure?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'End Session', style: 'destructive', onPress: () => resolve(true) },
+            ]
+          );
+        });
+  
+    if (!confirmed) return;
+  
+    setIsEnding(true);
+    try {
+      await completeSession(sessionCode);
+      setTimeout(() => {
+        navigation.replace('Results', { sessionCode });
+      }, 3000);
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not end the session');
+      setIsEnding(false);
+    }
   }
 
   if (loading) return <LoadingSpinner message="Loading game..." />;
