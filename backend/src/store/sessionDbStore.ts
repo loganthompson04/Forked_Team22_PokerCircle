@@ -29,7 +29,7 @@ export async function getSessionWithPlayers(
   const code = normalizeSessionCode(sessionCode);
 
   const sessionRes = await pool.query(
-    `SELECT session_code, host_user_id, status, game_state, created_at,
+    `SELECT session_code, host_user_id, status, created_at,
             buy_in_amount, max_rebuys
      FROM game_sessions
      WHERE session_code = $1`,
@@ -53,7 +53,7 @@ export async function getSessionWithPlayers(
       sessionCode: sessionRow.session_code as string,
       hostUserId: sessionRow.host_user_id as string,
       status: sessionRow.status as Session['status'],
-      gameState: (sessionRow.game_state as Session['gameState']) ?? {},
+      gameState: {},
       createdAt: sessionRow.created_at as string,
       buyInAmount: (sessionRow.buy_in_amount as number) ?? 0,
       maxRebuys: (sessionRow.max_rebuys as number) ?? 0,
@@ -89,25 +89,28 @@ export async function updatePlayerFinances(
 
   if (finances.buyIn !== undefined) {
     fields.push(`buy_in = $${paramIdx++}`);
-    values.push(finances.buyIn);
+    values.push(Math.round(finances.buyIn)); // store as integer cents/units
   }
   if (finances.rebuyTotal !== undefined) {
     fields.push(`rebuy_total = $${paramIdx++}`);
-    values.push(finances.rebuyTotal);
+    values.push(Math.round(finances.rebuyTotal));
   }
   if (finances.cashOut !== undefined) {
     fields.push(`cash_out = $${paramIdx++}`);
-    values.push(finances.cashOut);
+    values.push(Math.round(finances.cashOut));
   }
 
   if (fields.length === 0) return false;
 
+  // Push the WHERE clause params and record their indices BEFORE incrementing
+  const sessionCodeParamIdx = paramIdx;
+  const displayNameParamIdx = paramIdx + 1;
   values.push(code, name);
 
   const query = `
     UPDATE session_players
     SET ${fields.join(', ')}
-    WHERE session_code = $${paramIdx++} AND display_name = $${paramIdx++}
+    WHERE session_code = $${sessionCodeParamIdx} AND display_name = $${displayNameParamIdx}
   `;
 
   const result = await pool.query(query, values);

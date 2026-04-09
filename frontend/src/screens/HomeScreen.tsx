@@ -327,7 +327,7 @@ async function handleCreateSession() {
 
   const footerContent = (
     <View style={styles.buttonContainer}>
-    // In the footerContent, replace the primary button:
+    {/* In the footerContent, replace the primary button: */}
       <Pressable
         style={({ pressed }) => [
           styles.primaryButton,

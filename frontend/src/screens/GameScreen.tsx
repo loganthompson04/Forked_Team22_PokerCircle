@@ -34,35 +34,32 @@ export default function GameScreen({ route, navigation }: Props) {
   const [myPlayerName, setMyPlayerName] = useState<string | null>(null);
   const [buyInAmount, setBuyInAmount] = useState(0);
   const [maxRebuys, setMaxRebuys] = useState(0);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [buyIn, setBuyIn] = useState('');
   const [rebuy, setRebuy] = useState('');
   const [cashOut, setCashOut] = useState('');
   const [isUpdatingFinances, setIsUpdatingFinances] = useState(false);
+  const [financeError, setFinanceError] = useState<string | null>(null);
 
   // Use a ref so socket event handlers always see the latest player name
-  // without needing to be re-registered when state changes.
   const myPlayerNameRef = useRef<string | null>(null);
+  const sessionCodeRef = useRef(sessionCode);
 
   useEffect(() => {
     let active = true;
 
-    // ------------------------------------------------------------------
-    // Socket event handlers — defined before connect so they're ready
-    // to attach immediately.
-    // ------------------------------------------------------------------
     const handleConnect = () => {
-      // Re-join the room on every (re)connect, including the initial one.
       if (myPlayerNameRef.current) {
         socket.emit('session:joinRoom', {
-          sessionCode,
+          sessionCode: sessionCodeRef.current,
           playerName: myPlayerNameRef.current,
         });
       }
     };
 
     const handleFinanceUpdate = (payload: { sessionCode: string; players: Player[] }) => {
-      if (active && payload.sessionCode === sessionCode) {
+      if (active && payload.sessionCode === sessionCodeRef.current) {
         setPlayers(payload.players);
       }
     };
@@ -73,14 +70,11 @@ export default function GameScreen({ route, navigation }: Props) {
       }
     };
 
-    // Attach handlers BEFORE connecting so we never miss the connect event.
+    // Attach handlers BEFORE connecting
     socket.on('connect', handleConnect);
     socket.on('finance:update', handleFinanceUpdate);
     socket.on('game:complete', handleComplete);
 
-    // ------------------------------------------------------------------
-    // Init: fetch auth + session, then open the socket.
-    // ------------------------------------------------------------------
     async function init() {
       try {
         const [authRes, sessionRes] = await Promise.all([
@@ -95,7 +89,6 @@ export default function GameScreen({ route, navigation }: Props) {
 
         const auth = await authRes.json() as { userID: string; username: string };
 
-        // Store in ref so handleConnect can always see the latest value.
         myPlayerNameRef.current = auth.username;
 
         if (active) {
@@ -105,28 +98,29 @@ export default function GameScreen({ route, navigation }: Props) {
           setBuyInAmount(sessionRes.buyInAmount ?? 0);
           setMaxRebuys(sessionRes.maxRebuys ?? 0);
 
-          const me = sessionRes.players.find(p => p.displayName === auth.username);
+          // Pre-fill my finances from existing session data
+          const me = sessionRes.players.find(
+            (p) => (p.displayName ?? p.name) === auth.username
+          );
           if (me) {
-            setBuyIn(
-              me.buyIn > 0
-                ? me.buyIn.toString()
-                : sessionRes.buyInAmount > 0
-                  ? sessionRes.buyInAmount.toString()
-                  : ''
-            );
+            if (me.buyIn > 0) {
+              setBuyIn(me.buyIn.toString());
+            } else if (sessionRes.buyInAmount > 0) {
+              setBuyIn(sessionRes.buyInAmount.toString());
+            }
+            if (me.rebuyTotal > 0) setRebuy(me.rebuyTotal.toString());
+            if (me.cashOut > 0) setCashOut(me.cashOut.toString());
+          } else if (sessionRes.buyInAmount > 0) {
+            setBuyIn(sessionRes.buyInAmount.toString());
           }
 
           setLoading(false);
         }
 
-        // Connect the socket now that the player name is set in the ref.
-        // If it's already connected (shouldn't be — LobbyScreen disconnects
-        // on cleanup — but just in case), fire the join immediately.
         if (socket.connected) {
           handleConnect();
         } else {
           socket.connect();
-          // handleConnect fires automatically via the 'connect' event.
         }
       } catch (err) {
         console.error('GameScreen init error:', err);
@@ -141,8 +135,6 @@ export default function GameScreen({ route, navigation }: Props) {
       socket.off('connect', handleConnect);
       socket.off('finance:update', handleFinanceUpdate);
       socket.off('game:complete', handleComplete);
-      // Don't disconnect here — ResultsScreen may need the socket briefly.
-      // Socket lifecycle is managed at the navigation level.
     };
   }, [sessionCode, navigation]);
 
@@ -152,13 +144,16 @@ export default function GameScreen({ route, navigation }: Props) {
   async function handleUpdateFinances() {
     if (!myPlayerNameRef.current) return;
 
-    if (maxRebuys > 0 && buyInAmount > 0 && rebuy) {
-      const impliedCount = Math.round(parseFloat(rebuy) / buyInAmount);
+    setFinanceError(null);
+
+    const buyInVal = buyIn ? parseFloat(buyIn) : 0;
+    const rebuyVal = rebuy ? parseFloat(rebuy) : 0;
+    const cashOutVal = cashOut ? parseFloat(cashOut) : 0;
+
+    if (maxRebuys > 0 && buyInAmount > 0 && rebuyVal > 0) {
+      const impliedCount = Math.round(rebuyVal / buyInAmount);
       if (impliedCount > maxRebuys) {
-        Alert.alert(
-          'Too many rebuys',
-          `Max rebuys is ${maxRebuys}. You cannot exceed that limit.`
-        );
+        setFinanceError(`Max rebuys is ${maxRebuys}. You cannot exceed that limit.`);
         return;
       }
     }
@@ -166,16 +161,16 @@ export default function GameScreen({ route, navigation }: Props) {
     setIsUpdatingFinances(true);
     try {
       await updatePlayerFinances(sessionCode, myPlayerNameRef.current, {
-        buyIn: buyIn ? parseFloat(buyIn) : 0,
-        rebuyTotal: rebuy ? parseFloat(rebuy) : 0,
-        cashOut: cashOut ? parseFloat(cashOut) : 0,
+        buyIn: buyInVal,
+        rebuyTotal: rebuyVal,
+        cashOut: cashOutVal,
       });
-      // Player list updates via 'finance:update' socket event.
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2500);
+      // Player list will update via 'finance:update' socket event
     } catch (err: unknown) {
-      Alert.alert(
-        'Error',
-        err instanceof Error ? err.message : 'Failed to update finances'
-      );
+      const msg = err instanceof Error ? err.message : 'Failed to update finances';
+      setFinanceError(msg);
     } finally {
       setIsUpdatingFinances(false);
     }
@@ -194,8 +189,11 @@ export default function GameScreen({ route, navigation }: Props) {
             setIsEnding(true);
             try {
               await completeSession(sessionCode);
-              // Navigation happens via the 'game:complete' socket event,
-              // which the server emits to the whole room including us.
+              // Navigation happens via the 'game:complete' socket event.
+              // Add a fallback in case the socket event is missed:
+              setTimeout(() => {
+                navigation.replace('Results', { sessionCode });
+              }, 3000);
             } catch (err: unknown) {
               Alert.alert(
                 'Error',
@@ -212,8 +210,10 @@ export default function GameScreen({ route, navigation }: Props) {
   if (loading) return <LoadingSpinner message="Loading game..." />;
 
   const renderPlayer = ({ item }: { item: Player }) => {
-    const isMe = item.displayName === myPlayerName;
+    const displayName = item.displayName ?? item.name ?? '';
+    const isMe = displayName === myPlayerName;
     const hasCashedOut = item.cashOut > 0;
+    const totalIn = item.buyIn + item.rebuyTotal;
 
     return (
       <View style={[styles.playerCard, isMe && styles.myPlayerCard]}>
@@ -221,7 +221,7 @@ export default function GameScreen({ route, navigation }: Props) {
           <View style={styles.playerNameRow}>
             <AvatarDisplay avatarId={item.avatar} size={36} />
             <Text style={[styles.playerName, { marginLeft: 10 }]}>
-              {item.displayName} {isMe && '(You)'}
+              {displayName} {isMe && '(You)'}
             </Text>
           </View>
           {hasCashedOut ? (
@@ -232,12 +232,30 @@ export default function GameScreen({ route, navigation }: Props) {
             <Text style={styles.activeText}>In Play</Text>
           )}
         </View>
+
         <View style={styles.playerStats}>
-          <Text style={styles.statText}>
-            Total In: ${item.buyIn + item.rebuyTotal}
-          </Text>
+          {totalIn > 0 && (
+            <Text style={styles.statText}>
+              Total In: <Text style={styles.statAmount}>${totalIn}</Text>
+            </Text>
+          )}
+          {item.rebuyTotal > 0 && (
+            <Text style={styles.statText}>
+              Rebuys: <Text style={styles.statAmount}>${item.rebuyTotal}</Text>
+            </Text>
+          )}
           {hasCashedOut && (
-            <Text style={styles.statText}>Out: ${item.cashOut}</Text>
+            <Text style={styles.statText}>
+              Cash-out: <Text style={styles.statAmount}>${item.cashOut}</Text>
+            </Text>
+          )}
+          {hasCashedOut && totalIn > 0 && (
+            <Text style={[
+              styles.statText,
+              item.cashOut - totalIn >= 0 ? styles.positive : styles.negative
+            ]}>
+              Net: {item.cashOut - totalIn >= 0 ? '+' : ''}${item.cashOut - totalIn}
+            </Text>
           )}
         </View>
       </View>
@@ -269,57 +287,67 @@ export default function GameScreen({ route, navigation }: Props) {
         )}
 
         <View style={styles.content}>
-          <Text style={styles.sectionTitle}>Players Status</Text>
+          <Text style={styles.sectionTitle}>Players ({players.length})</Text>
           <FlatList
             data={players}
             renderItem={renderPlayer}
             keyExtractor={(p) =>
-              p.playerId || p.displayName || Math.random().toString()
+              p.playerId || (p.displayName ?? p.name) || Math.random().toString()
             }
             contentContainerStyle={styles.playerList}
+            scrollEnabled={false}
           />
 
           <View style={styles.myActions}>
             <Text style={styles.sectionTitle}>Your Finances</Text>
+            <Text style={styles.financeHint}>
+              Enter your totals and tap "Confirm" — you can update any time.
+            </Text>
             <View style={styles.inputRow}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Buy-in</Text>
+                <Text style={styles.inputLabel}>Buy-in ($)</Text>
                 <TextInput
                   style={styles.input}
                   value={buyIn}
-                  onChangeText={setBuyIn}
+                  onChangeText={(v) => { setBuyIn(v); setFinanceError(null); }}
                   keyboardType="numeric"
-                  placeholder="0"
+                  placeholder={buyInAmount > 0 ? String(buyInAmount) : '0'}
                   placeholderTextColor={colors.placeholder}
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Rebuys</Text>
+                <Text style={styles.inputLabel}>Rebuys ($)</Text>
                 <TextInput
                   style={styles.input}
                   value={rebuy}
-                  onChangeText={setRebuy}
+                  onChangeText={(v) => { setRebuy(v); setFinanceError(null); }}
                   keyboardType="numeric"
                   placeholder="0"
                   placeholderTextColor={colors.placeholder}
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Cash-out</Text>
+                <Text style={styles.inputLabel}>Cash-out ($)</Text>
                 <TextInput
                   style={styles.input}
                   value={cashOut}
-                  onChangeText={setCashOut}
+                  onChangeText={(v) => { setCashOut(v); setFinanceError(null); }}
                   keyboardType="numeric"
                   placeholder="0"
                   placeholderTextColor={colors.placeholder}
                 />
               </View>
             </View>
+
+            {financeError && (
+              <Text style={styles.errorText}>{financeError}</Text>
+            )}
+
             <Pressable
               style={[
                 styles.updateButton,
                 isUpdatingFinances && styles.buttonDisabled,
+                saveSuccess && styles.updateButtonSuccess,
               ]}
               onPress={handleUpdateFinances}
               disabled={isUpdatingFinances}
@@ -327,7 +355,9 @@ export default function GameScreen({ route, navigation }: Props) {
               {isUpdatingFinances ? (
                 <ActivityIndicator color={colors.textOnPrimary} />
               ) : (
-                <Text style={styles.updateButtonText}>Confirm My Totals</Text>
+                <Text style={styles.updateButtonText}>
+                  {saveSuccess ? '✓ Saved!' : 'Confirm My Totals'}
+                </Text>
               )}
             </Pressable>
           </View>
@@ -361,15 +391,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 8,
     marginTop: 10,
   },
-  playerList: { paddingBottom: 20 },
+  financeHint: {
+    fontSize: 12,
+    color: colors.placeholder,
+    marginBottom: 12,
+  },
+  playerList: { paddingBottom: 8 },
   playerCard: {
     backgroundColor: colors.inputBackground,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
+    padding: 14,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.inputBorder,
   },
@@ -378,35 +413,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  playerNameRow: { flexDirection: 'row', alignItems: 'center' },
-  playerName: { fontSize: 16, fontWeight: '600', color: colors.text },
-  activeText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
+  playerNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  playerName: { fontSize: 15, fontWeight: '600', color: colors.text, flex: 1 },
+  activeText: { fontSize: 11, color: colors.placeholder, fontWeight: '600' },
   confirmedBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#2E7D32',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   confirmedText: {
     fontSize: 10,
-    color: colors.textOnPrimary,
+    color: '#FFFFFF',
     fontWeight: '800',
   },
-  playerStats: { flexDirection: 'row', gap: 15 },
-  statText: { fontSize: 14, color: colors.placeholder },
+  playerStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  statText: { fontSize: 13, color: colors.placeholder },
+  statAmount: { color: colors.text, fontWeight: '600' },
+  positive: { color: '#4CAF50', fontWeight: '700' },
+  negative: { color: '#F44336', fontWeight: '700' },
   myActions: {
     backgroundColor: colors.inputBackground,
-    padding: 20,
+    padding: 16,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  inputRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  inputRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   inputGroup: { flex: 1 },
-  inputLabel: { fontSize: 12, color: colors.placeholder, marginBottom: 5 },
+  inputLabel: { fontSize: 11, color: colors.placeholder, marginBottom: 4 },
   input: {
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -415,6 +457,13 @@ const styles = StyleSheet.create({
     padding: 10,
     color: colors.text,
     fontSize: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: '#F44336',
+    fontSize: 13,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   updateButton: {
     backgroundColor: colors.primary,
@@ -422,17 +471,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  updateButtonSuccess: {
+    backgroundColor: '#2E7D32',
+  },
   updateButtonText: {
     color: colors.textOnPrimary,
     fontWeight: '700',
     fontSize: 16,
   },
   endButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: '#C62828',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   endButtonText: {
     color: colors.textOnPrimary,
