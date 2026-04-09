@@ -15,6 +15,7 @@ export interface Player {
   buyIn: number;
   rebuyTotal: number;
   cashOut: number;
+  avatar?: string | null;
 }
 
 export interface Session {

@@ -13,9 +13,11 @@ import {
 import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { colors } from '../theme/colors';
-import { getUserStats, getUserSessions, updateDisplayName } from '../api/api';
+import { getUserStats, getUserSessions, updateDisplayName, updateAvatar } from '../api/api';
 import { BACKEND_URL } from '../config/api';
 import type { UserStats, UserSession } from '../types/profile';
+import AvatarDisplay from '../components/AvatarDisplay';
+import AvatarPickerModal from '../components/AvatarPickerModal';
 
 type Props = StackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -43,6 +45,8 @@ export default function ProfileScreen({ navigation }: Props) {
     biggestLoss: 0,
   });
   const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState('');
@@ -54,15 +58,16 @@ export default function ProfileScreen({ navigation }: Props) {
         credentials: 'include',
       });
       if (!meRes.ok) throw new Error('Not authenticated');
-      const me = (await meRes.json()) as { userId: number; username: string };
+      const me = (await meRes.json()) as { userID: string; username: string; avatar?: string | null };
 
       const [fetchedStats, fetchedSessions] = await Promise.all([
-        getUserStats(me.userId),
-        getUserSessions(me.userId),
+        getUserStats(me.userID as any),
+        getUserSessions(me.userID as any),
       ]);
 
-      setUserId(me.userId);
+      setUserId(me.userID as any);
       setUsername(me.username);
+      setAvatar(me.avatar ?? null);
       setStats(fetchedStats);
       setSessions(fetchedSessions);
     }
@@ -118,6 +123,11 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity onPress={() => setPickerVisible(true)} style={styles.avatarWrapper}>
+          <AvatarDisplay avatarId={avatar} size={72} />
+          <Text style={styles.avatarEditHint}>Tap to change</Text>
+        </TouchableOpacity>
 
         <View style={styles.titleRow}>
           {editMode ? (
@@ -224,6 +234,21 @@ export default function ProfileScreen({ navigation }: Props) {
           />
         )}
       </View>
+      <AvatarPickerModal
+        visible={pickerVisible}
+        currentAvatarId={avatar}
+        onClose={() => setPickerVisible(false)}
+        onSelect={async (id) => {
+          const previous = avatar;
+          setPickerVisible(false);
+          setAvatar(id);
+          try {
+            await updateAvatar(userId, id);
+          } catch {
+            setAvatar(previous);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -260,6 +285,17 @@ const styles = StyleSheet.create({
     color: colors.placeholder,
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  avatarWrapper: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  avatarEditHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: colors.placeholder,
   },
 
   titleRow: {

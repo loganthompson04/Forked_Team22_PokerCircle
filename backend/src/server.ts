@@ -44,7 +44,7 @@ io.on('connection', (socket: Socket) => {
     console.log(`Socket ${socket.id} joined user room: user:${userId}`);
   });
 
-  socket.on('session:joinRoom', ({ sessionCode, playerName }: JoinRoomPayload) => {
+  socket.on('session:joinRoom', ({ sessionCode, playerName, avatar }: JoinRoomPayload) => {
     let session = getSession(sessionCode);
 
     if (!session) {
@@ -68,6 +68,7 @@ io.on('connection', (socket: Socket) => {
       playerId: socket.id,
       name: playerName,
       isReady: false,
+      avatar: avatar ?? null,
     };
 
     if (!session.players.some((p) => p.playerId === socket.id)) {

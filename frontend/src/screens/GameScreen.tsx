@@ -20,6 +20,7 @@ import { socket } from '../services/socket';
 import { BACKEND_URL } from '../config/api';
 import type { Player } from '../types/session';
 import LoadingSpinner from '../components/LoadingSpinner';
+import AvatarDisplay from '../components/AvatarDisplay';
 
 type Props = StackScreenProps<RootStackParamList, 'Game'>;
 
@@ -164,7 +165,10 @@ export default function GameScreen({ route, navigation }: Props) {
     return (
       <View style={[styles.playerCard, isMe && styles.myPlayerCard]}>
         <View style={styles.playerHeader}>
-          <Text style={styles.playerName}>{item.displayName} {isMe && '(You)'}</Text>
+          <View style={styles.playerNameRow}>
+            <AvatarDisplay avatarId={item.avatar} size={36} />
+            <Text style={[styles.playerName, { marginLeft: 10 }]}>{item.displayName} {isMe && '(You)'}</Text>
+          </View>
           {hasCashedOut ? (
             <View style={styles.confirmedBadge}>
               <Text style={styles.confirmedText}>CASHED OUT</Text>
@@ -288,6 +292,7 @@ const styles = StyleSheet.create({
   },
   myPlayerCard: { borderColor: colors.primary, borderWidth: 1.5 },
   playerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  playerNameRow: { flexDirection: 'row', alignItems: 'center' },
   playerName: { fontSize: 16, fontWeight: '600', color: colors.text },
   activeText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
   confirmedBadge: { backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },

@@ -4,6 +4,7 @@ import type { Player } from './session';
 export type JoinRoomPayload = {
   sessionCode: string;
   playerName: string;
+  avatar?: string | null;
 };
 
 export type LobbyUpdatePayload = {

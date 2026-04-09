@@ -6,12 +6,14 @@ class UserModel {
   username: string;
   email: string;
   password: string;
+  avatar?: string | null;
 
-  constructor({ userID, username, email, password }: User) {
+  constructor({ userID, username, email, password, avatar }: User) {
     this.userID = userID;
     this.username = username;
     this.email = email;
     this.password = password;
+    this.avatar = avatar ?? null;
   }
 
   async save(): Promise<void> {
@@ -23,7 +25,7 @@ class UserModel {
 
   static async findById(userID: string): Promise<UserModel | null> {
     const result = await pool.query<User>(
-      'SELECT user_id AS "userID", username, email, password_hash AS password FROM users WHERE user_id = $1',
+      'SELECT user_id AS "userID", username, email, password_hash AS password, avatar FROM users WHERE user_id = $1',
       [userID],
     );
     const row = result.rows[0];
@@ -33,7 +35,7 @@ class UserModel {
 
   static async findByEmail(email: string): Promise<UserModel | null> {
     const result = await pool.query<User>(
-      'SELECT user_id AS "userID", username, email, password_hash AS password FROM users WHERE email = $1',
+      'SELECT user_id AS "userID", username, email, password_hash AS password, avatar FROM users WHERE email = $1',
       [email],
     );
     const row = result.rows[0];

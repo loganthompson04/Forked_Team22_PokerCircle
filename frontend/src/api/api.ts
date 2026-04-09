@@ -320,3 +320,20 @@ export async function updateDisplayName(userId: number, newName: string): Promis
   const data = await response.json() as { username: string };
   return data.username;
 }
+
+export async function updateAvatar(userId: number, avatarId: string): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/users/${userId}/avatar`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatarId }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw Object.assign(new Error(body.error ?? 'Failed to update avatar'), {
+      statusCode: response.status,
+    });
+  }
+  const data = await response.json() as { avatar: string };
+  return data.avatar;
+}

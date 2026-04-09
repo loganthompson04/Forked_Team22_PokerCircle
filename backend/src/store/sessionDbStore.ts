@@ -38,10 +38,11 @@ export async function getSessionWithPlayers(
   if ((sessionRes.rowCount ?? 0) === 0) return null;
 
   const playersRes = await pool.query(
-    `SELECT id, display_name, is_ready, buy_in, rebuy_total, cash_out, joined_at
-     FROM session_players
-     WHERE session_code = $1
-     ORDER BY joined_at ASC`,
+    `SELECT sp.id, sp.display_name, sp.is_ready, sp.buy_in, sp.rebuy_total, sp.cash_out, sp.joined_at, u.avatar
+     FROM session_players sp
+     LEFT JOIN users u ON u.username = sp.display_name
+     WHERE sp.session_code = $1
+     ORDER BY sp.joined_at ASC`,
     [code]
   );
 
@@ -61,6 +62,7 @@ export async function getSessionWithPlayers(
       rebuyTotal: (r.rebuy_total as number) ?? 0,
       cashOut: (r.cash_out as number) ?? 0,
       joinedAt: r.joined_at as string,
+      avatar: (r.avatar ?? null) as string | null,
     })),
   };
 }

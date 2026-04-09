@@ -35,6 +35,7 @@ const initDb = async () => {
         email VARCHAR(100) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         total_balance BIGINT DEFAULT 0,
+        avatar TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );

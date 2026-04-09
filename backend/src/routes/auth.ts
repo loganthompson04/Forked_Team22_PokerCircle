@@ -110,6 +110,7 @@ router.get(
       userID: user.userID,
       username: user.username,
       email: user.email,
+      avatar: user.avatar ?? null,
     });
   }),
 );

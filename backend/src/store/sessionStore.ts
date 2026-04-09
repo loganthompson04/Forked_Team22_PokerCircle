@@ -16,6 +16,7 @@ export interface SocketPlayer {
   playerId: string; // socket.id
   name: string;
   isReady: boolean;
+  avatar?: string | null;
 }
 
 export interface SocketSession {

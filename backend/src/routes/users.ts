@@ -107,5 +107,39 @@ router.patch(
   })
 );
 
+// PATCH /api/users/:userId/avatar
+router.patch(
+  '/:userId/avatar',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { avatarId } = req.body;
+
+    const VALID_IDS = new Set([
+      'red-spade', 'red-heart', 'red-diamond', 'red-club',
+      'blue-spade', 'blue-heart', 'blue-diamond', 'blue-club',
+      'green-spade', 'green-heart', 'green-diamond', 'green-club',
+      'purple-spade', 'purple-heart', 'purple-diamond', 'purple-club',
+    ]);
+
+    if (!avatarId || !VALID_IDS.has(String(avatarId))) {
+      res.status(400).json({ error: 'Invalid avatar ID' });
+      return;
+    }
+
+    if (String(req.session.userId) !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const result = await pool.query(
+      `UPDATE users SET avatar = $1 WHERE user_id = $2 RETURNING avatar`,
+      [avatarId, userId]
+    );
+
+    res.json({ avatar: result.rows[0].avatar });
+  })
+);
+
 export default router;
 

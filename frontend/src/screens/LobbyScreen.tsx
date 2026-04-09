@@ -8,6 +8,7 @@ import { colors } from '../theme/colors';
 import { BACKEND_URL } from '../config/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import AvatarDisplay from '../components/AvatarDisplay';
 
 type Props = StackScreenProps<RootStackParamList, 'Lobby'>;
 
@@ -15,6 +16,7 @@ type LobbyPlayer = {
   playerId: string;
   name: string;
   isReady: boolean;
+  avatar?: string | null;
 };
 
 type LobbyUpdatePayload = {
@@ -38,6 +40,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
   const [isHost, setIsHost] = useState(false);
   const previousPlayersRef = useRef<LobbyPlayer[]>([]);
   const resolvedPlayerNameRef = useRef('');
+  const resolvedAvatarRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,6 +91,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
       socket.emit('session:joinRoom', {
         sessionCode,
         playerName: resolvedPlayerNameRef.current,
+        avatar: resolvedAvatarRef.current,
       });
     };
 
@@ -96,6 +100,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
       socket.emit('session:joinRoom', {
         sessionCode,
         playerName: resolvedPlayerNameRef.current,
+        avatar: resolvedAvatarRef.current,
       });
     };
 
@@ -116,12 +121,13 @@ export default function LobbyScreen({ route, navigation }: Props) {
           return;
         }
 
-        const authData = (await authRes.json()) as { userID: string; username: string };
+        const authData = (await authRes.json()) as { userID: string; username: string; avatar?: string | null };
         const myUserId = authData.userID;
         const playerName = authData.username;
 
         if (!active) return;
         resolvedPlayerNameRef.current = playerName;
+        resolvedAvatarRef.current = authData.avatar ?? null;
 
         try {
           const joinRes = await fetch(`${BACKEND_URL}/api/sessions/${sessionCode}/join`, {
@@ -157,6 +163,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
           socket.emit('session:joinRoom', {
             sessionCode,
             playerName: resolvedPlayerNameRef.current,
+            avatar: resolvedAvatarRef.current,
           });
         }
       } catch (err) {
@@ -316,9 +323,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
           return (
             <View style={styles.playerRow}>
-              <View>
-                <Text style={styles.playerName}>{item.name}</Text>
-                <Text style={styles.playerLabel}>Player {index + 1}</Text>
+              <View style={styles.playerLeft}>
+                <AvatarDisplay avatarId={item.avatar} size={36} />
+                <View style={styles.playerInfo}>
+                  <Text style={styles.playerName}>{item.name}</Text>
+                  <Text style={styles.playerLabel}>Player {index + 1}</Text>
+                </View>
               </View>
 
               {isMe ? (
@@ -501,4 +511,6 @@ const styles = StyleSheet.create({
   },
   inviteButtonPressed: { opacity: 0.85 },
   inviteButtonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  playerLeft: { flexDirection: 'row', alignItems: 'center' },
+  playerInfo: { marginLeft: 10 },
 });

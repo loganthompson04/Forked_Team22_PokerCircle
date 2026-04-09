@@ -28,6 +28,7 @@ function mapPlayerRow(r: Record<string, unknown>) {
     buyIn:       (r['buyIn']    as number) ?? 0,
     rebuyTotal:  (r['rebuyTotal'] as number) ?? 0,
     cashOut:     (r['cashOut']  as number) ?? 0,
+    avatar:      (r['avatar']   ?? null)  as string | null,
   };
 }
 
@@ -99,9 +100,11 @@ router.get(
          p.is_ready         AS "isReady",
          p.buy_in           AS "buyIn",
          p.rebuy_total      AS "rebuyTotal",
-         p.cash_out         AS "cashOut"
+         p.cash_out         AS "cashOut",
+         u.avatar           AS "avatar"
        FROM game_sessions gs
        LEFT JOIN session_players p ON p.session_code = gs.session_code
+       LEFT JOIN users u ON u.username = p.display_name
        WHERE gs.session_code = $1
        ORDER BY p.joined_at ASC NULLS LAST;`,
       [sessionCode]
@@ -188,9 +191,11 @@ router.post(
          p.is_ready         AS "isReady",
          p.buy_in           AS "buyIn",
          p.rebuy_total      AS "rebuyTotal",
-         p.cash_out         AS "cashOut"
+         p.cash_out         AS "cashOut",
+         u.avatar           AS "avatar"
        FROM game_sessions gs
        LEFT JOIN session_players p ON p.session_code = gs.session_code
+       LEFT JOIN users u ON u.username = p.display_name
        WHERE gs.session_code = $1
        ORDER BY p.joined_at ASC NULLS LAST;`,
       [sessionCode]
