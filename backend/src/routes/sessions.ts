@@ -47,35 +47,35 @@ router.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const hostUserId = req.session.userId!;
+    const { buyInAmount = 0, maxRebuys = 0 } = req.body as {
+      buyInAmount?: number;
+      maxRebuys?: number;
+    };
     let attempts = 0;
 
     while (attempts < 20) {
       const sessionCode = generateSessionCode(6);
-
       try {
         const result = await pool.query(
-          `INSERT INTO game_sessions (session_code, host_user_id)
-           VALUES ($1, $2)
-           RETURNING session_code, created_at, host_user_id;`,
-          [sessionCode, hostUserId]
+          `INSERT INTO game_sessions (session_code, host_user_id, buy_in_amount, max_rebuys)
+           VALUES ($1, $2, $3, $4)
+           RETURNING session_code, created_at, host_user_id, buy_in_amount, max_rebuys;`,
+          [sessionCode, hostUserId, buyInAmount, maxRebuys]
         );
-
         const row = result.rows[0];
         return res.status(201).json({
           sessionCode: row.session_code,
           createdAt: row.created_at,
           hostUserId: row.host_user_id,
+          buyInAmount: row.buy_in_amount,
+          maxRebuys: row.max_rebuys,
           players: [],
         });
       } catch (err: unknown) {
-        if ((err as { code?: string })?.code === '23505') {
-          attempts++;
-          continue;
-        }
+        if ((err as { code?: string })?.code === '23505') { attempts++; continue; }
         throw err;
       }
     }
-
     return res.status(500).json({ error: 'Failed to generate unique session code' });
   })
 );
@@ -94,6 +94,8 @@ router.get(
          gs.created_at      AS "createdAt",
          gs.host_user_id    AS "hostUserId",
          gs.status,
+         gs.buy_in_amount    AS "buyInAmount",
+         gs.max_rebuys      AS "maxRebuys",
          p.id               AS "playerId",
          p.display_name     AS "displayName",
          p.joined_at        AS "joinedAt",
@@ -340,6 +342,27 @@ router.patch(
     if (body.buyIn      !== undefined) finances.buyIn      = body.buyIn;
     if (body.rebuyTotal !== undefined) finances.rebuyTotal = body.rebuyTotal;
     if (body.cashOut    !== undefined) finances.cashOut    = body.cashOut;
+    
+    // Enforce max rebuys if set
+    if (finances.rebuyTotal !== undefined && finances.rebuyTotal > 0) {
+      const limitsResult = await pool.query(
+        `SELECT gs.max_rebuys, gs.buy_in_amount
+         FROM game_sessions gs
+         WHERE gs.session_code = $1`,
+        [sessionCode]
+      );
+      const maxRebuys: number = limitsResult.rows[0]?.max_rebuys ?? 0;
+      const buyInAmount: number = limitsResult.rows[0]?.buy_in_amount ?? 0;
+    
+      if (maxRebuys > 0 && buyInAmount > 0) {
+        const impliedCount = Math.round(finances.rebuyTotal / buyInAmount);
+        if (impliedCount > maxRebuys) {
+          return res.status(400).json({
+            error: `Max rebuys is ${maxRebuys}. You cannot exceed that limit.`,
+          });
+        }
+      }
+    }
 
     const success = await updatePlayerFinances(sessionCode, displayName, finances);
 

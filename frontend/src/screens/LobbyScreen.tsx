@@ -35,6 +35,8 @@ export default function LobbyScreen({ route, navigation }: Props) {
   const [startError, setStartError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [buyInAmount, setBuyInAmount] = useState(0);
+  const [maxRebuys, setMaxRebuys] = useState(0);
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
@@ -68,7 +70,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     const handleGameStart = (payload: GameStartPayload) => {
       if (!active) return;
-      navigation.replace('Game', { sessionCode: payload.sessionCode });
+      navigation.replace('Game', { sessionCode: payload.sessionCode, buyInAmount });
     };
 
     const handleSocketError = (payload: { message: string }) => {
@@ -146,7 +148,11 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
         try {
           const session = await getSession(sessionCode);
-          if (active) setIsHost(session.hostUserId === myUserId);
+          if (active) {
+            setIsHost(session.hostUserId === myUserId);
+            setBuyInAmount(session.buyInAmount ?? 0);
+            setMaxRebuys(session.maxRebuys ?? 0);
+          }
         } catch (err) {
           console.error('LobbyScreen: Error fetching session:', err);
         }
@@ -294,6 +300,17 @@ export default function LobbyScreen({ route, navigation }: Props) {
           {players.length} {players.length === 1 ? 'player' : 'players'}
         </Text>
       </View>
+
+      {(buyInAmount > 0 || maxRebuys > 0) && (
+        <View style={styles.rulesCard}>
+          {buyInAmount > 0 && (
+            <Text style={styles.ruleText}>Buy-in: ${buyInAmount}</Text>
+        )}
+        <Text style={styles.ruleText}>
+          Rebuys: {maxRebuys === 0 ? 'Unlimited' : `Max ${maxRebuys}`}
+        </Text>
+      </View>
+    )}
 
       {isJoining && (
         <View style={styles.infoBox}>
@@ -513,4 +530,21 @@ const styles = StyleSheet.create({
   inviteButtonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
   playerLeft: { flexDirection: 'row', alignItems: 'center' },
   playerInfo: { marginLeft: 10 },
+  rulesCard: {
+  marginHorizontal: 16,
+  marginBottom: 12,
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 8,
+  backgroundColor: colors.inputBackground,
+  borderWidth: 1,
+  borderColor: colors.inputBorder,
+  alignItems: 'center',
+},
+ruleText: {
+  color: colors.text,
+  fontSize: 14,
+  fontWeight: '600',
+  marginVertical: 2,
+},
 });

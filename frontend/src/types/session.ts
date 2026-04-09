@@ -23,5 +23,7 @@ export interface Session {
   createdAt: string;
   hostUserId: string;
   status: SessionStatus;
+  buyInAmount: number;
+  maxRebuys: number;
   players: Player[];
 }

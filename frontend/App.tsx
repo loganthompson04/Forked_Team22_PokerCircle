@@ -28,7 +28,7 @@ export type RootStackParamList = {
   JoinSession: { preFilledCode?: string } | undefined;
   Lobby: { sessionCode: string };
   InviteFriends: { sessionCode: string };
-  Game: { sessionCode: string };
+  Game: { sessionCode: string; buyInAmount?: number };
   /** TM22-88 — session summary: net results + who-pays-who settlement */
   Results: { sessionCode: string };
   SessionDetail: { sessionCode: string };

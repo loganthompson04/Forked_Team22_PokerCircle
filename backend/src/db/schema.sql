@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS session_players (
   session_code VARCHAR(6) NOT NULL REFERENCES game_sessions(session_code) ON DELETE CASCADE,
   display_name TEXT NOT NULL,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  is_ready BOOLEAN NOT NULL DEFAULT FALSE
+  is_ready BOOLEAN NOT NULL DEFAULT FALSE,
   buy_in Integer Default 0,
   rebuy_total Integer Default 0,
   cash_out Integer Default 0,
@@ -63,3 +63,8 @@ CREATE TABLE IF NOT EXISTS session_players (
 
 CREATE INDEX IF NOT EXISTS idx_session_players_session_code
   ON session_players(session_code);
+
+ALTER TABLE game_sessions
+  ADD COLUMN IF NOT EXISTS buy_in_amount INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS max_rebuys    INTEGER NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'waiting';

@@ -29,7 +29,8 @@ export async function getSessionWithPlayers(
   const code = normalizeSessionCode(sessionCode);
 
   const sessionRes = await pool.query(
-    `SELECT session_code, host_user_id, status, game_state, created_at
+    `SELECT session_code, host_user_id, status, game_state, created_at,
+            buy_in_amount, max_rebuys
      FROM game_sessions
      WHERE session_code = $1`,
     [code]
@@ -48,12 +49,14 @@ export async function getSessionWithPlayers(
 
   const sessionRow = sessionRes.rows[0];
 
-  return {
-    sessionCode: sessionRow.session_code as string,
-    hostUserId: sessionRow.host_user_id as string,
-    status: sessionRow.status as Session['status'],
-    gameState: (sessionRow.game_state as Session['gameState']) ?? {},
-    createdAt: sessionRow.created_at as string,
+    return {
+      sessionCode: sessionRow.session_code as string,
+      hostUserId: sessionRow.host_user_id as string,
+      status: sessionRow.status as Session['status'],
+      gameState: (sessionRow.game_state as Session['gameState']) ?? {},
+      createdAt: sessionRow.created_at as string,
+      buyInAmount: (sessionRow.buy_in_amount as number) ?? 0,
+      maxRebuys: (sessionRow.max_rebuys as number) ?? 0,
     players: playersRes.rows.map((r) => ({
       playerId: String(r.id),
       displayName: r.display_name as string,

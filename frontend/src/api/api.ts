@@ -36,11 +36,15 @@ export async function getSession(sessionCode: string): Promise<Session> {
   return response.json() as Promise<Session>;
 }
 
-export async function createSession(): Promise<Session> {
+export async function createSession(
+  buyInAmount = 0,
+  maxRebuys = 0
+): Promise<Session> {
   const response = await fetch(`${BACKEND_URL}/api/sessions`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ buyInAmount, maxRebuys }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
@@ -79,6 +83,7 @@ export async function updatePlayerFinances(
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(finances),
     }
   );

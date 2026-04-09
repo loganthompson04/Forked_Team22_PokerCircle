@@ -24,5 +24,7 @@ export interface Session {
   status: SessionStatus;
   gameState: GameState;
   createdAt: string;
+  buyInAmount: number;
+  maxRebuys: number;
   players: Player[];
 }

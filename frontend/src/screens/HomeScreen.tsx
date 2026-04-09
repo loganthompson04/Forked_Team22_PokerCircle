@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
@@ -34,6 +38,9 @@ export default function HomeScreen({ navigation }: Props) {
   const [respondError, setRespondError] = useState<string | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [respondingToRequest, setRespondingToRequest] = useState<number | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newBuyIn, setNewBuyIn] = useState('');
+  const [newMaxRebuys, setNewMaxRebuys] = useState('');
 
   const [username, setUsername] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -178,24 +185,24 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }
 
-  async function handleCreateSession() {
-    setCreateError(null);
-    setCreating(true);
-
-    try {
-      const session = await createSession();
-      navigation.navigate('Lobby', { sessionCode: session.sessionCode });
-    } catch (err: unknown) {
-      console.error('Create session error:', err);
-      setCreateError(
-        err instanceof Error
-          ? err.message
-          : 'Could not create session — check your connection'
-      );
-    } finally {
-      setCreating(false);
-    }
+async function handleCreateSession() {
+  setCreateError(null);
+  setCreating(true);
+  setShowCreateModal(false);
+  try {
+    const session = await createSession(
+      newBuyIn ? parseFloat(newBuyIn) : 0,
+      newMaxRebuys ? parseInt(newMaxRebuys, 10) : 0
+    );
+    navigation.navigate('Lobby', { sessionCode: session.sessionCode });
+  } catch (err: unknown) {
+    setCreateError(err instanceof Error ? err.message : 'Could not create session');
+  } finally {
+    setCreating(false);
+    setNewBuyIn('');
+    setNewMaxRebuys('');
   }
+}
 
   async function handleRespond(invite: SessionInvite, action: 'accept' | 'decline') {
     setRespondingTo(invite.id);
@@ -320,12 +327,13 @@ export default function HomeScreen({ navigation }: Props) {
 
   const footerContent = (
     <View style={styles.buttonContainer}>
+    // In the footerContent, replace the primary button:
       <Pressable
         style={({ pressed }) => [
           styles.primaryButton,
           (pressed || creating) && styles.buttonPressed,
         ]}
-        onPress={handleCreateSession}
+        onPress={() => setShowCreateModal(true)}  // ← open modal, don't create directly
         disabled={creating}
       >
         {creating ? (
@@ -368,46 +376,105 @@ export default function HomeScreen({ navigation }: Props) {
   );
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.listContent}
-      data={invites}
-      keyExtractor={(item) => item.id.toString()}
-      ListHeaderComponent={headerContent}
-      ListFooterComponent={footerContent}
-      renderItem={({ item }) => {
-        const isResponding = respondingTo === item.id;
+    <View style={{ flex: 1 }}>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.listContent}
+        data={invites}
+        keyExtractor={(item) => item.id.toString()}
+        ListHeaderComponent={headerContent}
+        ListFooterComponent={footerContent}
+        renderItem={({ item }) => {
+          const isResponding = respondingTo === item.id;
 
-        return (
-          <View style={styles.inviteRow}>
-            <Text style={styles.inviteFrom}>From: {item.inviterUsername}</Text>
-            <Text style={styles.inviteCode}>{item.sessionCode}</Text>
+          return (
+            <View style={styles.inviteRow}>
+              <Text style={styles.inviteFrom}>From: {item.inviterUsername}</Text>
+              <Text style={styles.inviteCode}>{item.sessionCode}</Text>
 
-            <View style={styles.inviteActions}>
+              <View style={styles.inviteActions}>
+                <Pressable
+                  style={[styles.acceptButton, isResponding && styles.actionDisabled]}
+                  onPress={() => handleRespond(item, 'accept')}
+                  disabled={isResponding}
+                >
+                  {isResponding ? (
+                    <ActivityIndicator color={colors.textOnPrimary} size="small" />
+                  ) : (
+                    <Text style={styles.acceptButtonText}>Accept</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={[styles.declineButton, isResponding && styles.actionDisabled]}
+                  onPress={() => handleRespond(item, 'decline')}
+                  disabled={isResponding}
+                >
+                  <Text style={styles.declineButtonText}>Decline</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        }}
+      />
+
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Session Settings</Text>
+
+              <Text style={styles.modalLabel}>Buy-In Amount ($)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={newBuyIn}
+                onChangeText={setNewBuyIn}
+                keyboardType="numeric"
+                placeholder="0 = no limit"
+                placeholderTextColor={colors.placeholder}
+              />
+
+              <Text style={styles.modalLabel}>Max Rebuys</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={newMaxRebuys}
+                onChangeText={setNewMaxRebuys}
+                keyboardType="numeric"
+                placeholder="0 = unlimited"
+                placeholderTextColor={colors.placeholder}
+              />
+
               <Pressable
-                style={[styles.acceptButton, isResponding && styles.actionDisabled]}
-                onPress={() => handleRespond(item, 'accept')}
-                disabled={isResponding}
+                style={[styles.primaryButton, { marginBottom: 10 }]}
+                onPress={handleCreateSession}
+                disabled={creating}
               >
-                {isResponding ? (
-                  <ActivityIndicator color={colors.textOnPrimary} size="small" />
+                {creating ? (
+                  <ActivityIndicator color={colors.textOnPrimary} />
                 ) : (
-                  <Text style={styles.acceptButtonText}>Accept</Text>
+                  <Text style={styles.primaryButtonText}>Create</Text>
                 )}
               </Pressable>
 
               <Pressable
-                style={[styles.declineButton, isResponding && styles.actionDisabled]}
-                onPress={() => handleRespond(item, 'decline')}
-                disabled={isResponding}
+                style={styles.secondaryButton}
+                onPress={() => setShowCreateModal(false)}
               >
-                <Text style={styles.declineButtonText}>Decline</Text>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
               </Pressable>
             </View>
           </View>
-        );
-      }}
-    />
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -420,6 +487,44 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 32,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.inputBackground,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalLabel: {
+    fontSize: 13,
+    color: colors.placeholder,
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: 8,
+    padding: 12,
+    color: colors.text,
+    fontSize: 16,
+    marginBottom: 16,
   },
 
   header: {
