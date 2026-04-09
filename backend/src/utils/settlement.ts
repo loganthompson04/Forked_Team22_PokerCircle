@@ -37,7 +37,7 @@ export function calculateSettlement(players: Player[]): SettlementResult {
 
   // If no one has entered finances yet, return everyone with net=0
   const initialResults = players.map((p) => ({
-    displayName: p.displayName ?? p.name ?? 'Unknown',
+    displayName: p.displayName ?? 'Unknown',
     netResult: p.cashOut - (p.buyIn + p.rebuyTotal),
   }));
 
