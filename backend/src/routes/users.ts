@@ -22,8 +22,8 @@ router.get(
         COALESCE(MIN(sp.cash_out - sp.buy_in - sp.rebuy_total), 0) AS "biggestLoss"
       FROM session_players sp
       JOIN game_sessions gs ON gs.session_code = sp.session_code
-      WHERE sp.user_id = $1
-        AND gs.status = 'finished'`,
+      JOIN users u ON u.username = sp.display_name AND u.user_id = $1
+      WHERE gs.status = 'finished'`,
       [userId]
     );
 
@@ -55,8 +55,8 @@ router.get(
         (SELECT COUNT(*)::int FROM session_players WHERE session_code = gs.session_code) AS "playerCount"
       FROM session_players sp
       JOIN game_sessions gs ON gs.session_code = sp.session_code
-      WHERE sp.user_id = $1
-        AND gs.status = 'finished'
+      JOIN users u ON u.username = sp.display_name AND u.user_id = $1
+      WHERE gs.status = 'finished'
       ORDER BY gs.created_at DESC`,
       [userId]
     );
