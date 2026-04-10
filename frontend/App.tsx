@@ -128,25 +128,32 @@ export default function App() {
       <StatusBar style="auto" />
       <Stack.Navigator
         initialRouteName={authStatus === 'authenticated' ? 'Home' : 'Welcome'}
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: colors.background,
+            elevation: 0,
+            shadowOpacity: 0,
+            borderBottomWidth: 0,
+          },
+          headerTintColor: colors.primary,
+          headerTitle: '',
+          headerBackTitleVisible: false,
+        }}
       >
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="JoinSession" component={JoinSessionScreen} />
         <Stack.Screen name="Lobby" component={LobbyScreen} />
-        <Stack.Screen
-          name="InviteFriends"
-          component={InviteFriendsScreen}
-          options={{ title: 'Invite Friends' }}
-        />
+        <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} />
         <Stack.Screen name="Game" component={GameScreen} />
         <Stack.Screen
           name="Results"
           component={ResultsScreen}
           options={{ headerShown: false }}
         />
-        <Stack.Screen name="FriendsList" component={FriendsListScreen} options={{ title: 'Friends' }} />
+        <Stack.Screen name="FriendsList" component={FriendsListScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ headerShown: false }} />
       </Stack.Navigator>

@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: 20,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
@@ -156,6 +157,8 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     textAlign: 'center',
     color: colors.primaryDark,
+    width: '100%',
+    maxWidth: 320,
   },
   input: {
     backgroundColor: colors.inputBackground,
@@ -165,6 +168,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: colors.inputBorder,
+    width: '100%',
+    maxWidth: 320,
   },
   errorText: {
     color: colors.primary,
@@ -179,6 +184,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
+    width: '100%',
+    maxWidth: 320,
   },
   buttonPressed: { opacity: 0.7 },
   buttonText: {
@@ -192,6 +199,8 @@ const styles = StyleSheet.create({
     borderTopColor: colors.inputBorder,
     paddingTop: 16,
     gap: 10,
+    width: '100%',
+    maxWidth: 320,
   },
   demoLabel: {
     color: colors.placeholder,
@@ -215,6 +224,8 @@ const styles = StyleSheet.create({
   link: {
     marginTop: 20,
     alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
   },
   linkText: {
     color: colors.primary,

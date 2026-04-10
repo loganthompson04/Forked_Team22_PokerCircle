@@ -242,27 +242,26 @@ export default function HomeScreen({ navigation }: Props) {
   const headerContent = (
     <View style={styles.header}>
       <View style={styles.profileRow}>
-        <View>
+        <View style={styles.userSection}>
           <Text style={styles.title}>PokerCircle</Text>
           {username !== null && (
-            <Text style={styles.usernameText}>👤 {username}</Text>
+            <Text style={styles.usernameText}>{username}</Text>
           )}
+          <Pressable
+            style={({ pressed }) => [
+              styles.logoutButton,
+              (pressed || loggingOut) && styles.logoutButtonPressed,
+            ]}
+            onPress={handleLogout}
+            disabled={loggingOut}
+          >
+            {loggingOut ? (
+              <ActivityIndicator color={colors.placeholder} size="small" />
+            ) : (
+              <Text style={styles.logoutText}>Log Out</Text>
+            )}
+          </Pressable>
         </View>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.logoutButton,
-            (pressed || loggingOut) && styles.logoutButtonPressed,
-          ]}
-          onPress={handleLogout}
-          disabled={loggingOut}
-        >
-          {loggingOut ? (
-            <ActivityIndicator color={colors.placeholder} size="small" />
-          ) : (
-            <Text style={styles.logoutText}>Log Out</Text>
-          )}
-        </Pressable>
       </View>
 
       {friendRequests.length > 0 && (
@@ -420,21 +419,21 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 32,
+    justifyContent: 'center',
   },
 
   header: {
     alignItems: 'center',
-    paddingTop: 60,
     paddingBottom: 8,
     width: '100%',
   },
   profileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     width: '100%',
     maxWidth: 320,
     marginBottom: 32,
+  },
+  userSection: {
+    alignItems: 'flex-start',
   },
   title: {
     fontSize: 42,
@@ -446,10 +445,10 @@ const styles = StyleSheet.create({
     color: colors.placeholder,
     fontSize: 13,
     marginTop: 4,
+    marginBottom: 12,
     letterSpacing: 0.5,
   },
   logoutButton: {
-    marginTop: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
