@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -51,6 +51,21 @@ export default function ProfileScreen({ navigation }: Props) {
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [winFilter, setWinFilter] = useState<'all' | 'win' | 'loss'>('all');
+
+  const filteredSessions = useMemo(() => {
+    return sessions.filter((s) => {
+      const matchesSearch =
+        searchText.trim() === '' ||
+        s.sessionCode.toLowerCase().includes(searchText.trim().toLowerCase());
+      const matchesFilter =
+        winFilter === 'all' ||
+        (winFilter === 'win' && s.net > 0) ||
+        (winFilter === 'loss' && s.net < 0);
+      return matchesSearch && matchesFilter;
+    });
+  }, [sessions, searchText, winFilter]);
 
   useEffect(() => {
     async function load() {
@@ -199,13 +214,39 @@ export default function ProfileScreen({ navigation }: Props) {
 
         <Text style={styles.sectionLabel}>Session History</Text>
 
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search sessions..."
+          placeholderTextColor={colors.placeholder}
+          value={searchText}
+          onChangeText={setSearchText}
+        />
+
+        <View style={styles.filterRow}>
+          {(['all', 'win', 'loss'] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              onPress={() => setWinFilter(f)}
+              style={[styles.filterBtn, winFilter === f && styles.filterBtnActive]}
+            >
+              <Text style={[styles.filterBtnText, winFilter === f && styles.filterBtnTextActive]}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {sessions.length === 0 ? (
           <View style={styles.centered}>
             <Text style={styles.emptyText}>No completed sessions yet</Text>
           </View>
+        ) : filteredSessions.length === 0 ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyText}>No sessions match your search</Text>
+          </View>
         ) : (
           <FlatList
-            data={sessions}
+            data={filteredSessions}
             keyExtractor={(item) => item.sessionCode}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
@@ -444,5 +485,47 @@ const styles = StyleSheet.create({
   sessionPlayers: {
     color: colors.placeholder,
     fontSize: 12,
+  },
+
+  searchInput: {
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: 8,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  filterBtn: {
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.inputBackground,
+  },
+
+  filterBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+
+  filterBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.placeholder,
+  },
+
+  filterBtnTextActive: {
+    color: '#000',
   },
 });
