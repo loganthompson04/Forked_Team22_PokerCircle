@@ -25,17 +25,21 @@ import AvatarDisplay from '../components/AvatarDisplay';
 
 type Props = StackScreenProps<RootStackParamList, 'Game'>;
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
 function formatAmount(n: number) {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+type PlayerCardProps = {
+  player: Player;
+  isMe: boolean;
+  canRemove: boolean;
+  onRemove: () => void;
+};
 
-type PlayerCardProps = { player: Player; isMe: boolean };
-
-function PlayerCard({ player, isMe }: PlayerCardProps) {
+function PlayerCard({ player, isMe, canRemove, onRemove }: PlayerCardProps) {
   const displayName = player.displayName ?? player.name ?? '';
   const totalIn = player.buyIn + player.rebuyTotal;
   const hasCashedOut = player.cashOut > 0;
@@ -44,8 +48,8 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
     player.buyIn > 0 && player.rebuyTotal > 0
       ? Math.round(player.rebuyTotal / player.buyIn)
       : player.rebuyTotal > 0
-      ? 1
-      : 0;
+        ? 1
+        : 0;
 
   return (
     <View
@@ -55,7 +59,6 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
         hasCashedOut && styles.playerCardCashedOut,
       ]}
     >
-      {/* Left: avatar + name */}
       <View style={styles.playerCardLeft}>
         <AvatarDisplay
           avatarId={player.avatar}
@@ -71,7 +74,6 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
             {isMe ? <Text style={styles.youLabel}> (You)</Text> : null}
           </Text>
 
-          {/* Stats row */}
           <View style={styles.playerStatRow}>
             {totalIn > 0 && (
               <View style={styles.statPill}>
@@ -79,6 +81,7 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
                 <Text style={styles.statPillValue}>{formatAmount(totalIn)}</Text>
               </View>
             )}
+
             {rebuyCount > 0 && (
               <View style={[styles.statPill, styles.statPillRebuy]}>
                 <Text style={styles.statPillLabel}>↻</Text>
@@ -87,6 +90,7 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
                 </Text>
               </View>
             )}
+
             {hasCashedOut && (
               <View style={[styles.statPill, styles.statPillCashOut]}>
                 <Text style={styles.statPillLabel}>OUT</Text>
@@ -97,7 +101,6 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
         </View>
       </View>
 
-      {/* Right: badge + net */}
       <View style={styles.playerCardRight}>
         {hasCashedOut ? (
           <>
@@ -122,12 +125,16 @@ function PlayerCard({ player, isMe }: PlayerCardProps) {
             <Text style={styles.activeBadgeText}>PLAYING</Text>
           </View>
         )}
+
+        {canRemove && (
+          <Pressable style={styles.removeButton} onPress={onRemove}>
+            <Text style={styles.removeButtonText}>Remove</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
 }
-
-// ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function GameScreen({ route, navigation }: Props) {
   const { sessionCode } = route.params;
@@ -150,9 +157,7 @@ export default function GameScreen({ route, navigation }: Props) {
   const myPlayerNameRef = useRef<string | null>(null);
   const sessionCodeRef = useRef(sessionCode);
 
-  // ── Derived: all players cashed out (≥1 player)
-  const allCashedOut =
-    players.length > 0 && players.every((p) => p.cashOut > 0);
+  const allCashedOut = players.length > 0 && players.every((p) => p.cashOut > 0);
   const cashedOutCount = players.filter((p) => p.cashOut > 0).length;
 
   useEffect(() => {
@@ -168,20 +173,42 @@ export default function GameScreen({ route, navigation }: Props) {
     };
 
     const handleFinanceUpdate = (payload: { sessionCode: string; players: Player[] }) => {
-      if (active && payload.sessionCode === sessionCodeRef.current) {
-        setPlayers(payload.players);
-      }
+      if (!active || payload.sessionCode !== sessionCodeRef.current) return;
+      setPlayers(payload.players);
     };
 
     const handleComplete = (payload: { sessionCode: string }) => {
-      if (active) {
-        navigation.replace('Results', { sessionCode: payload.sessionCode });
+      if (!active) return;
+      navigation.replace('Results', { sessionCode: payload.sessionCode });
+    };
+
+    const handlePlayerRemoved = (payload: {
+      sessionCode: string;
+      removedDisplayName: string;
+    }) => {
+      if (!active || payload.sessionCode !== sessionCodeRef.current) return;
+
+      const removedName = payload.removedDisplayName.trim().toLowerCase();
+
+      setPlayers((prev) =>
+        prev.filter(
+          (p) => ((p.displayName ?? p.name ?? '').trim().toLowerCase() !== removedName),
+        ),
+      );
+
+      if (removedName === (myPlayerNameRef.current ?? '').trim().toLowerCase()) {
+        Alert.alert('Removed from Session', 'The host removed you from the game.');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
       }
     };
 
     socket.on('connect', handleConnect);
     socket.on('finance:update', handleFinanceUpdate);
     socket.on('game:complete', handleComplete);
+    socket.on('player:removed', handlePlayerRemoved);
 
     async function init() {
       try {
@@ -198,27 +225,29 @@ export default function GameScreen({ route, navigation }: Props) {
         const auth = (await authRes.json()) as { userID: string; username: string };
         myPlayerNameRef.current = auth.username;
 
-        if (active) {
-          setMyPlayerName(auth.username);
-          setIsHost(auth.userID === sessionRes.hostUserId);
-          setPlayers(sessionRes.players);
-          setBuyInAmount(sessionRes.buyInAmount ?? 0);
-          setMaxRebuys(sessionRes.maxRebuys ?? 0);
+        if (!active) return;
 
-          const me = sessionRes.players.find(
-            (p) => (p.displayName ?? p.name) === auth.username,
-          );
-          if (me) {
-            if (me.buyIn > 0) setBuyIn(me.buyIn.toString());
-            else if (sessionRes.buyInAmount > 0) setBuyIn(sessionRes.buyInAmount.toString());
-            if (me.rebuyTotal > 0) setRebuy(me.rebuyTotal.toString());
-            if (me.cashOut > 0) setCashOut(me.cashOut.toString());
-          } else if (sessionRes.buyInAmount > 0) {
-            setBuyIn(sessionRes.buyInAmount.toString());
-          }
+        setMyPlayerName(auth.username);
+        setIsHost(auth.userID === sessionRes.hostUserId);
+        setPlayers(sessionRes.players);
+        setBuyInAmount(sessionRes.buyInAmount ?? 0);
+        setMaxRebuys(sessionRes.maxRebuys ?? 0);
 
-          setLoading(false);
+        const me = sessionRes.players.find(
+          (p) => ((p.displayName ?? p.name ?? '').trim() === auth.username.trim()),
+        );
+
+        if (me) {
+          if (me.buyIn > 0) setBuyIn(me.buyIn.toString());
+          else if (sessionRes.buyInAmount > 0) setBuyIn(sessionRes.buyInAmount.toString());
+
+          if (me.rebuyTotal > 0) setRebuy(me.rebuyTotal.toString());
+          if (me.cashOut > 0) setCashOut(me.cashOut.toString());
+        } else if (sessionRes.buyInAmount > 0) {
+          setBuyIn(sessionRes.buyInAmount.toString());
         }
+
+        setLoading(false);
 
         if (socket.connected) handleConnect();
         else socket.connect();
@@ -235,10 +264,60 @@ export default function GameScreen({ route, navigation }: Props) {
       socket.off('connect', handleConnect);
       socket.off('finance:update', handleFinanceUpdate);
       socket.off('game:complete', handleComplete);
+      socket.off('player:removed', handlePlayerRemoved);
     };
   }, [sessionCode, navigation]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  async function handleRemovePlayer(displayName: string) {
+    const cleanName = displayName.trim();
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(`Remove ${cleanName} from the session?`)
+        : await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              'Remove Player',
+              `Remove ${cleanName} from the session?`,
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: () => resolve(true),
+                },
+              ],
+            );
+          });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/sessions/${sessionCode}/players/${encodeURIComponent(cleanName)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        },
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Could not remove player');
+      }
+
+      setPlayers((prev) =>
+        prev.filter(
+          (p) => ((p.displayName ?? p.name ?? '').trim().toLowerCase() !== cleanName.toLowerCase()),
+        ),
+      );
+    } catch (err: unknown) {
+      Alert.alert(
+        'Error',
+        err instanceof Error ? err.message : 'Could not remove player',
+      );
+    }
+  }
 
   async function handleUpdateFinances() {
     if (!myPlayerNameRef.current) return;
@@ -257,12 +336,14 @@ export default function GameScreen({ route, navigation }: Props) {
     }
 
     setIsUpdatingFinances(true);
+
     try {
       await updatePlayerFinances(sessionCode, myPlayerNameRef.current, {
         buyIn: buyInVal,
         rebuyTotal: rebuyVal,
         cashOut: cashOutVal,
       });
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (err: unknown) {
@@ -296,6 +377,7 @@ export default function GameScreen({ route, navigation }: Props) {
     if (!confirmed) return;
 
     setIsEnding(true);
+
     try {
       await completeSession(sessionCode);
       setTimeout(() => {
@@ -310,9 +392,9 @@ export default function GameScreen({ route, navigation }: Props) {
     }
   }
 
-  if (loading) return <LoadingSpinner message="Loading game..." />;
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  if (loading) {
+    return <LoadingSpinner message="Loading game..." />;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -327,12 +409,12 @@ export default function GameScreen({ route, navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Session header ── */}
           <View style={styles.header}>
             <View style={styles.codeBadge}>
               <Text style={styles.codeLabel}>SESSION</Text>
               <Text style={styles.code}>{sessionCode}</Text>
             </View>
+
             {(buyInAmount > 0 || maxRebuys > 0) && (
               <View style={styles.rulesRow}>
                 {buyInAmount > 0 && (
@@ -351,7 +433,6 @@ export default function GameScreen({ route, navigation }: Props) {
             )}
           </View>
 
-          {/* ── Section: Players ── */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Players</Text>
             <View style={styles.sectionBadgeRow}>
@@ -370,27 +451,33 @@ export default function GameScreen({ route, navigation }: Props) {
 
           <FlatList
             data={players}
-            renderItem={({ item }) => (
-              <PlayerCard
-                player={item}
-                isMe={(item.displayName ?? item.name) === myPlayerName}
-              />
-            )}
+            renderItem={({ item }) => {
+              const displayName = (item.displayName ?? item.name ?? '').trim();
+              const isMe = displayName === (myPlayerName ?? '').trim();
+              const canRemove = isHost && !isMe;
+
+              return (
+                <PlayerCard
+                  player={item}
+                  isMe={isMe}
+                  canRemove={canRemove}
+                  onRemove={() => handleRemovePlayer(displayName)}
+                />
+              );
+            }}
             keyExtractor={(p) =>
-              p.playerId || (p.displayName ?? p.name) || Math.random().toString()
+              p.playerId || (p.displayName ?? p.name)?.trim() || Math.random().toString()
             }
             contentContainerStyle={styles.playerList}
             scrollEnabled={false}
           />
 
-          {/* ── Divider ── */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerLabel}>YOUR FINANCES</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* ── Section: My Finances ── */}
           <View style={styles.financeCard}>
             <Text style={styles.financeHint}>
               Enter your totals below and tap Confirm — you can update any time during the
@@ -412,6 +499,7 @@ export default function GameScreen({ route, navigation }: Props) {
                   placeholderTextColor={colors.placeholder}
                 />
               </View>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Rebuys ($)</Text>
                 <TextInput
@@ -426,6 +514,7 @@ export default function GameScreen({ route, navigation }: Props) {
                   placeholderTextColor={colors.placeholder}
                 />
               </View>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Cash-out ($)</Text>
                 <TextInput
@@ -463,10 +552,8 @@ export default function GameScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
 
-          {/* ── Section: End Session (host only) ── */}
           {isHost && (
             <View style={styles.endSessionSection}>
-              {/* Progress indicator */}
               <View style={styles.endProgressRow}>
                 <Text style={styles.endProgressLabel}>
                   {allCashedOut
@@ -488,7 +575,6 @@ export default function GameScreen({ route, navigation }: Props) {
                 </View>
               </View>
 
-              {/* Helper text when disabled */}
               {!allCashedOut && (
                 <Text style={styles.endHelperText}>
                   The session can be ended once every player has entered their cash-out
@@ -525,8 +611,6 @@ export default function GameScreen({ route, navigation }: Props) {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -537,7 +621,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // Header
   header: {
     alignItems: 'center',
     paddingTop: 12,
@@ -585,7 +668,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Section header
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -622,7 +704,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Player list
   playerList: {
     gap: 8,
   },
@@ -754,8 +835,21 @@ const styles = StyleSheet.create({
   netNegative: {
     color: '#EF5350',
   },
+  removeButton: {
+    marginTop: 8,
+    backgroundColor: '#8B1E1E',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-end',
+  },
+  removeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
 
-  // Divider
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -774,7 +868,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Finance card
   financeCard: {
     backgroundColor: colors.inputBackground,
     borderRadius: 16,
@@ -840,7 +933,6 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
 
-  // End session section
   endSessionSection: {
     gap: 12,
     marginBottom: 8,
