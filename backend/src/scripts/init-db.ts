@@ -47,6 +47,9 @@ const initDb = async () => {
         session_code TEXT PRIMARY KEY,
         host_user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
         status TEXT NOT NULL DEFAULT 'waiting',
+        buy_in_amount INTEGER NOT NULL DEFAULT 0,
+        max_rebuys INTEGER NOT NULL DEFAULT 0,
+        game_state JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -58,6 +61,9 @@ const initDb = async () => {
         session_code TEXT NOT NULL REFERENCES game_sessions(session_code) ON DELETE CASCADE,
         display_name TEXT NOT NULL,
         is_ready BOOLEAN NOT NULL DEFAULT FALSE,
+        buy_in INTEGER NOT NULL DEFAULT 0,
+        rebuy_total INTEGER NOT NULL DEFAULT 0,
+        cash_out INTEGER NOT NULL DEFAULT 0,
         joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CONSTRAINT unique_player_per_session UNIQUE (session_code, display_name)
       );

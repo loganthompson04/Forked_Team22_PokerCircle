@@ -72,6 +72,52 @@ router.get(
   })
 );
 
+// GET /api/users/:userId/leaderboard
+// Returns net results for the user and their accepted friends ranked by all-time net winnings
+router.get(
+  "/:userId/leaderboard",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    if (String(req.session.userId) !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const query = `
+      WITH friend_ids AS (
+        SELECT
+          CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END AS u_id
+        FROM friendships
+        WHERE (requester_id = $1 OR addressee_id = $1)
+          AND status = 'accepted'
+        UNION
+        SELECT $1::uuid AS u_id
+      )
+      SELECT
+        u.username AS "displayName",
+        u.avatar,
+        COALESCE(SUM(sp.cash_out - sp.buy_in - sp.rebuy_total), 0)::float AS "netResult"
+      FROM friend_ids fi
+      JOIN users u ON u.user_id = fi.u_id
+      LEFT JOIN session_players sp ON sp.display_name = u.username
+      LEFT JOIN game_sessions gs ON gs.session_code = sp.session_code AND gs.status = 'finished'
+      GROUP BY u.user_id, u.username, u.avatar
+      ORDER BY "netResult" DESC
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    res.json({
+      leaderboard: result.rows.map(row => ({
+        ...row,
+        netResult: parseFloat(row.netResult)
+      })),
+    });
+  })
+);
+
 // PATCH /api/users/:userId/displayname
 // Updates the display name (username) for a user
 router.patch(

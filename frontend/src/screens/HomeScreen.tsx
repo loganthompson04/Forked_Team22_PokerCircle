@@ -357,6 +357,16 @@ async function handleCreateSession() {
           styles.secondaryButton,
           pressed && styles.buttonPressed,
         ]}
+        onPress={() => navigation.navigate('Leaderboard')}
+      >
+        <Text style={styles.secondaryButtonText}>Leaderboard</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          pressed && styles.buttonPressed,
+        ]}
         onPress={() => navigation.navigate('FriendsList')}
       >
         <Text style={styles.secondaryButtonText}>My Friends</Text>

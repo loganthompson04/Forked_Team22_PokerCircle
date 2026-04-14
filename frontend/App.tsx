@@ -20,6 +20,7 @@ import FriendsListScreen from './src/screens/FriendsListScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SessionDetailScreen from './src/screens/SessionDetailScreen';
 
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import { BACKEND_URL } from './src/config/api';
 import { loadAuth } from './src/services/authStorage';
 import { colors } from './src/theme/colors';
@@ -35,6 +36,9 @@ export type RootStackParamList = {
   Game: { sessionCode: string; buyInAmount?: number };
   Results: { sessionCode: string };
   SessionDetail: { sessionCode: string };
+  FriendsList: undefined;
+  Profile: undefined;
+  Leaderboard: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -142,7 +146,6 @@ export default function App() {
           },
           headerTintColor: colors.primary,
           headerTitle: '',
-          headerBackTitleVisible: false,
         }}
       >
         {/* AUTH */}
@@ -160,6 +163,7 @@ export default function App() {
         <Stack.Screen name="Game" component={GameScreen} />
         <Stack.Screen name="Results" component={ResultsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

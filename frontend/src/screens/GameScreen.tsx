@@ -40,13 +40,20 @@ type PlayerCardProps = {
 };
 
 function PlayerCard({ player, isMe, canRemove, onRemove }: PlayerCardProps) {
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+type PlayerCardProps = { player: Player; isMe: boolean; sessionBuyIn: number };
+
+function PlayerCard({ player, isMe, sessionBuyIn }: PlayerCardProps) {
   const displayName = player.displayName ?? player.name ?? '';
   const totalIn = player.buyIn + player.rebuyTotal;
   const hasCashedOut = player.cashOut > 0;
   const net = hasCashedOut ? player.cashOut - totalIn : null;
+
+  // Use session buy-in for counting rebuys if available
   const rebuyCount =
-    player.buyIn > 0 && player.rebuyTotal > 0
-      ? Math.round(player.rebuyTotal / player.buyIn)
+    sessionBuyIn > 0 && player.rebuyTotal > 0
+      ? Math.floor(player.rebuyTotal / sessionBuyIn)
       : player.rebuyTotal > 0
         ? 1
         : 0;
@@ -86,7 +93,7 @@ function PlayerCard({ player, isMe, canRemove, onRemove }: PlayerCardProps) {
               <View style={[styles.statPill, styles.statPillRebuy]}>
                 <Text style={styles.statPillLabel}>↻</Text>
                 <Text style={styles.statPillValue}>
-                  {rebuyCount}x {formatAmount(player.rebuyTotal)}
+                  {rebuyCount} {rebuyCount === 1 ? 'rebuy' : 'rebuys'}
                 </Text>
               </View>
             )}
@@ -153,6 +160,12 @@ export default function GameScreen({ route, navigation }: Props) {
   const [cashOut, setCashOut] = useState('');
   const [isUpdatingFinances, setIsUpdatingFinances] = useState(false);
   const [financeError, setFinanceError] = useState<string | null>(null);
+
+  // Derived rebuy count for the current user
+  const myRebuyCount =
+    buyInAmount > 0 && rebuy
+      ? Math.floor(parseFloat(rebuy) / buyInAmount)
+      : 0;
 
   const myPlayerNameRef = useRef<string | null>(null);
   const sessionCodeRef = useRef(sessionCode);
@@ -328,7 +341,7 @@ export default function GameScreen({ route, navigation }: Props) {
     const cashOutVal = cashOut ? parseFloat(cashOut) : 0;
 
     if (maxRebuys > 0 && buyInAmount > 0 && rebuyVal > 0) {
-      const impliedCount = Math.round(rebuyVal / buyInAmount);
+      const impliedCount = Math.floor(rebuyVal / buyInAmount);
       if (impliedCount > maxRebuys) {
         setFinanceError(`Max rebuys is ${maxRebuys}. You cannot exceed that limit.`);
         return;
@@ -465,6 +478,13 @@ export default function GameScreen({ route, navigation }: Props) {
                 />
               );
             }}
+            renderItem={({ item }) => (
+              <PlayerCard
+                player={item}
+                isMe={(item.displayName ?? item.name) === myPlayerName}
+                sessionBuyIn={buyInAmount}
+              />
+            )}
             keyExtractor={(p) =>
               p.playerId || (p.displayName ?? p.name)?.trim() || Math.random().toString()
             }
@@ -501,7 +521,12 @@ export default function GameScreen({ route, navigation }: Props) {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Rebuys ($)</Text>
+                <View style={styles.labelWithCount}>
+                  <Text style={styles.inputLabel}>Rebuys ($)</Text>
+                  {myRebuyCount > 0 && (
+                    <Text style={styles.rebuyCountBadge}>{myRebuyCount}x</Text>
+                  )}
+                </View>
                 <TextInput
                   style={styles.input}
                   value={rebuy}
@@ -530,6 +555,27 @@ export default function GameScreen({ route, navigation }: Props) {
                 />
               </View>
             </View>
+
+            {buyInAmount > 0 && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.quickRebuyButton,
+                  pressed && styles.buttonPressed,
+                  maxRebuys > 0 && myRebuyCount >= maxRebuys && styles.buttonDisabled,
+                ]}
+                onPress={() => {
+                  const currentRebuy = rebuy ? parseFloat(rebuy) : 0;
+                  if (maxRebuys > 0 && myRebuyCount >= maxRebuys) return;
+                  setRebuy((currentRebuy + buyInAmount).toString());
+                  setFinanceError(null);
+                }}
+                disabled={maxRebuys > 0 && myRebuyCount >= maxRebuys}
+              >
+                <Text style={styles.quickRebuyText}>
+                  + Quick Rebuy ({formatAmount(buyInAmount)})
+                </Text>
+              </Pressable>
+            )}
 
             {financeError && <Text style={styles.errorText}>{financeError}</Text>}
 
@@ -898,6 +944,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
+  labelWithCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  rebuyCountBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+    backgroundColor: 'rgba(255, 193, 7, 0.15)',
+    paddingHorizontal: 4,
+    borderRadius: 4,
+  },
   input: {
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -908,6 +968,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  quickRebuyButton: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.3)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  quickRebuyText: {
+    color: '#FFC107',
+    fontSize: 13,
+    fontWeight: '700',
   },
   errorText: {
     color: '#EF5350',
@@ -982,5 +1056,10 @@ const styles = StyleSheet.create({
   },
   endButtonTextDisabled: {
     color: colors.placeholder,
+  },
+});
+  buttonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
 });

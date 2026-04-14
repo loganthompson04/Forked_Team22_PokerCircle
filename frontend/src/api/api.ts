@@ -277,11 +277,31 @@ export async function declineInvite(id: number): Promise<void> {
   }
 }
 
+export interface LeaderboardEntry {
+  displayName: string;
+  avatar: string | null;
+  netResult: number;
+}
+
 // ---------------------------------------------------------------------------
 // Profile
 // ---------------------------------------------------------------------------
 
-export async function getUserStats(userId: number): Promise<UserStats> {
+export async function getLeaderboard(userId: string): Promise<LeaderboardEntry[]> {
+  const response = await fetch(`${BACKEND_URL}/api/users/${userId}/leaderboard`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw Object.assign(new Error(body.error ?? 'Failed to fetch leaderboard'), {
+      statusCode: response.status,
+    });
+  }
+  const data = await response.json() as { leaderboard: LeaderboardEntry[] };
+  return data.leaderboard;
+}
+
+export async function getUserStats(userId: string | number): Promise<UserStats> {
   const response = await fetch(`${BACKEND_URL}/api/users/${userId}/stats`, {
     credentials: 'include',
   });
