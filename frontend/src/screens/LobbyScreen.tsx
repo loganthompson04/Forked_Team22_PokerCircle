@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { socket } from '../services/socket';
@@ -44,6 +53,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
   const resolvedPlayerNameRef = useRef('');
   const resolvedAvatarRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -106,6 +116,24 @@ export default function LobbyScreen({ route, navigation }: Props) {
       });
     };
 
+    const handlePlayerRemoved = (payload: {
+      sessionCode: string;
+      removedDisplayName: string;
+    }) => {
+      if (!active || payload.sessionCode !== sessionCode) return;
+
+      const removedName = payload.removedDisplayName.trim().toLowerCase();
+      const myName = resolvedPlayerNameRef.current.trim().toLowerCase();
+
+      if (removedName === myName) {
+        Alert.alert('Left Session', 'You are no longer in this lobby.');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      }
+    };
+
     async function init() {
       try {
         setLoading(true);
@@ -123,7 +151,11 @@ export default function LobbyScreen({ route, navigation }: Props) {
           return;
         }
 
-        const authData = (await authRes.json()) as { userID: string; username: string; avatar?: string | null };
+        const authData = (await authRes.json()) as {
+          userID: string;
+          username: string;
+          avatar?: string | null;
+        };
         const myUserId = authData.userID;
         const playerName = authData.username;
 
@@ -159,6 +191,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
         socket.on('lobby:update', handleLobbyUpdate);
         socket.on('game:start', handleGameStart);
+        socket.on('player:removed', handlePlayerRemoved);
         socket.on('error', handleSocketError);
         socket.on('reconnect', handleReconnect);
         socket.on('connect', handleConnect);
@@ -188,13 +221,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
       active = false;
       socket.off('lobby:update', handleLobbyUpdate);
       socket.off('game:start', handleGameStart);
+      socket.off('player:removed', handlePlayerRemoved);
       socket.off('error', handleSocketError);
       socket.off('reconnect', handleReconnect);
       socket.off('connect', handleConnect);
       socket.off('connect_error', handleConnectError);
       socket.disconnect();
     };
-  }, [sessionCode, navigation]);
+  }, [sessionCode, navigation, buyInAmount]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -259,6 +293,58 @@ export default function LobbyScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleLeaveSession = async () => {
+    const myPlayerName = resolvedPlayerNameRef.current?.trim();
+    if (!myPlayerName || isLeaving) return;
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm('Are you sure you want to leave this session?')
+        : await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              'Leave Session',
+              'Are you sure you want to leave this session?',
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Leave', style: 'destructive', onPress: () => resolve(true) },
+              ]
+            );
+          });
+
+    if (!confirmed) return;
+
+    try {
+      setIsLeaving(true);
+
+      const res = await fetch(
+        `${BACKEND_URL}/api/sessions/${sessionCode}/players/${encodeURIComponent(myPlayerName)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to leave session');
+      }
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (err) {
+      console.error('Leave session error:', err);
+      Alert.alert(
+        'Error',
+        err instanceof Error ? err.message : 'Could not leave session'
+      );
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
   const handleRetry = () => {
     previousPlayersRef.current = [];
     setPlayers([]);
@@ -305,12 +391,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
         <View style={styles.rulesCard}>
           {buyInAmount > 0 && (
             <Text style={styles.ruleText}>Buy-in: ${buyInAmount}</Text>
-        )}
-        <Text style={styles.ruleText}>
-          Rebuys: {maxRebuys === 0 ? 'Unlimited' : `Max ${maxRebuys}`}
-        </Text>
-      </View>
-    )}
+          )}
+          <Text style={styles.ruleText}>
+            Rebuys: {maxRebuys === 0 ? 'Unlimited' : `Max ${maxRebuys}`}
+          </Text>
+        </View>
+      )}
 
       {isJoining && (
         <View style={styles.infoBox}>
@@ -413,6 +499,21 @@ export default function LobbyScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       )}
+
+      <View style={styles.leaveButtonContainer}>
+        <Pressable
+          style={[
+            styles.leaveButton,
+            isLeaving && styles.leaveButtonDisabled,
+          ]}
+          onPress={handleLeaveSession}
+          disabled={isLeaving}
+        >
+          <Text style={styles.leaveButtonText}>
+            {isLeaving ? 'Leaving...' : 'Leave Session'}
+          </Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -420,8 +521,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 16 },
-  sessionCode: { fontSize: 48, fontWeight: 'bold', color: colors.primary, letterSpacing: 8 },
+  sessionCode: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: colors.primary,
+    letterSpacing: 8,
+  },
   playerCount: { fontSize: 16, color: colors.text, marginTop: 8 },
+
   infoBox: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -433,6 +540,7 @@ const styles = StyleSheet.create({
     borderColor: colors.inputBorder,
   },
   infoText: { color: colors.text, fontSize: 14, textAlign: 'center' },
+
   successBox: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -443,7 +551,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
   },
-  successText: { color: colors.primary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
+  successText: {
+    color: colors.primary,
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+
   statusBox: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -455,7 +569,9 @@ const styles = StyleSheet.create({
     borderColor: colors.inputBorder,
   },
   statusText: { color: colors.text, fontSize: 14, textAlign: 'center' },
+
   listContent: { paddingHorizontal: 16, flexGrow: 1 },
+
   playerRow: {
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -470,8 +586,10 @@ const styles = StyleSheet.create({
   },
   playerName: { fontSize: 16, color: colors.text, fontWeight: '600' },
   playerLabel: { marginTop: 4, fontSize: 12, color: colors.placeholder },
+
   readyBadge: { fontSize: 12, fontWeight: '600', color: colors.primary },
   notReadyBadge: { fontSize: 12, fontWeight: '600', color: colors.placeholder },
+
   readyButton: {
     borderWidth: 1,
     borderColor: colors.placeholder,
@@ -485,9 +603,11 @@ const styles = StyleSheet.create({
   },
   readyButtonText: { fontSize: 12, fontWeight: '600', color: colors.placeholder },
   readyButtonTextActive: { color: colors.textOnPrimary },
+
   emptyState: { marginTop: 48, alignItems: 'center', paddingHorizontal: 24 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8 },
   emptyText: { textAlign: 'center', color: colors.placeholder, fontSize: 16 },
+
   errorContent: {
     flex: 1,
     alignItems: 'center',
@@ -503,7 +623,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '600' },
-  startButtonContainer: { padding: 16, paddingBottom: 24 },
+
+  startButtonContainer: { padding: 16, paddingBottom: 12 },
   waitingText: {
     textAlign: 'center',
     color: colors.placeholder,
@@ -518,6 +639,7 @@ const styles = StyleSheet.create({
   },
   startButtonDisabled: { opacity: 0.4 },
   startButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '700' },
+
   inviteButton: {
     borderWidth: 1.5,
     borderColor: colors.primary,
@@ -528,23 +650,44 @@ const styles = StyleSheet.create({
   },
   inviteButtonPressed: { opacity: 0.85 },
   inviteButtonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+
   playerLeft: { flexDirection: 'row', alignItems: 'center' },
   playerInfo: { marginLeft: 10 },
+
   rulesCard: {
-  marginHorizontal: 16,
-  marginBottom: 12,
-  paddingVertical: 10,
-  paddingHorizontal: 14,
-  borderRadius: 8,
-  backgroundColor: colors.inputBackground,
-  borderWidth: 1,
-  borderColor: colors.inputBorder,
-  alignItems: 'center',
-},
-ruleText: {
-  color: colors.text,
-  fontSize: 14,
-  fontWeight: '600',
-  marginVertical: 2,
-},
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    alignItems: 'center',
+  },
+  ruleText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginVertical: 2,
+  },
+
+  leaveButtonContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  leaveButton: {
+    backgroundColor: '#8B1E1E',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  leaveButtonDisabled: {
+    opacity: 0.6,
+  },
+  leaveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

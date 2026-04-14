@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  StyleSheet, Text, View, TextInput, Pressable,
+  StyleSheet, Text, TextInput, Pressable,
   ActivityIndicator, ScrollView, StatusBar,
 } from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
@@ -12,12 +12,12 @@ import { saveAuth } from '../services/authStorage';
 type Props = StackScreenProps<RootStackParamList, 'Signup'>;
 
 export default function SignupScreen({ navigation }: Props) {
-  const [username, setUsername]               = useState('');
-  const [email, setEmail]                     = useState('');
-  const [password, setPassword]               = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading]                 = useState(false);
-  const [errorMessage, setErrorMessage]       = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const clearError = () => setErrorMessage(null);
 
@@ -56,13 +56,12 @@ export default function SignupScreen({ navigation }: Props) {
       };
 
       if (response.ok && data.userID && data.username && data.email) {
-        // Persist auth so a fresh app launch goes straight to Home
         await saveAuth({
           userID: data.userID,
           username: data.username,
           email: data.email,
         });
-        navigation.replace('Home');
+        navigation.replace('MainTabs');
       } else if (response.status === 409) {
         setErrorMessage(data.error ?? 'That email or username is already taken.');
       } else {

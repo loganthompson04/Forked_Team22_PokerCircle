@@ -66,7 +66,7 @@ export default function ResultsScreen({ route, navigation }: Props) {
   const handleReturnHome = () => {
     navigation.reset({
       index: 0,
-      routes: [{ name: 'Home' }],
+      routes: [{ name: 'MainTabs' }],
     });
   };
 

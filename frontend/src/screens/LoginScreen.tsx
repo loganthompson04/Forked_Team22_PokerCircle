@@ -12,9 +12,9 @@ import { saveAuth } from '../services/authStorage';
 type Props = StackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-  const [email, setEmail]       = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState<'main' | 'demo1' | 'demo2' | null>(null);
+  const [loading, setLoading] = useState<'main' | 'demo1' | 'demo2' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const doLogin = async (
@@ -43,13 +43,12 @@ export default function LoginScreen({ navigation }: Props) {
       };
 
       if (response.ok && data.userID && data.username && data.email) {
-        // Subtask 1/4: persist auth so the next app launch skips Login
         await saveAuth({
           userID: data.userID,
           username: data.username,
           email: data.email,
         });
-        navigation.replace('Home');
+        navigation.replace('MainTabs');
       } else {
         setErrorMessage(data.message ?? data.error ?? 'Login failed. Please try again.');
       }
